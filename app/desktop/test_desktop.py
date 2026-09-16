@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import requests
+from PIL import Image
 from uvicorn import Config as UvicornConfig
 
 import app.desktop.desktop_server as desktop_server
@@ -32,9 +33,9 @@ def mock_tk_root():
 @pytest.fixture
 def mock_image():
     """Mock PIL Image."""
-    with patch("app.desktop.desktop.Image") as mock_img:
+    with patch("app.desktop.desktop.Image.open") as mock_image_open:
         mock_image_obj = Mock()
-        mock_img.open.return_value = mock_image_obj
+        mock_image_open.return_value = mock_image_obj
         yield mock_image_obj
 
 
@@ -235,6 +236,39 @@ class TestDesktopApp:
             # Check first menu item has default=False
             menu_calls = mock_kiln_menu_item.call_args_list
             assert menu_calls[0][1]["default"] is False
+
+    @patch("app.desktop.desktop.sys.platform", "linux")
+    def test_run_tray_linux_icon_scaling(
+        self, mock_tk_root, mock_image, mock_kiln_menu_item
+    ):
+        """Test run_tray scales the tray icon down on Linux."""
+        app = DesktopApp(port=TEST_PORT)
+
+        with (
+            patch.object(app, "resource_path", return_value="taskbar.png"),
+            patch("app.desktop.desktop.KilnTray") as mock_kiln_tray_class,
+        ):
+            app.run_tray()
+
+            mock_image.resize.assert_called_once()
+            mock_image.resize.assert_called_once_with(
+                (24, 24), Image.Resampling.LANCZOS
+            )
+            resized_image = mock_image.resize.return_value
+            mock_kiln_tray_class.assert_called_once()
+            assert mock_kiln_tray_class.call_args.args[1] is resized_image
+
+    @patch("app.desktop.desktop.sys.platform", "win32")
+    def test_run_tray_windows_no_icon_scaling(
+        self, mock_tk_root, mock_image, mock_kiln_tray, mock_kiln_menu_item
+    ):
+        """Test run_tray does not scale the tray icon on Windows."""
+        app = DesktopApp(port=TEST_PORT)
+
+        with patch.object(app, "resource_path", return_value="taskbar.png"):
+            app.run_tray()
+
+            mock_image.resize.assert_not_called()
 
     def test_close_splash_with_pyi_splash(self, mock_tk_root):
         """Test close_splash when pyi_splash is available."""

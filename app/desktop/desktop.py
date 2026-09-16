@@ -119,6 +119,11 @@ class DesktopApp:
 
         tray_image = Image.open(self.resource_path("taskbar.png"))
 
+        # taskbar.png is sized for macOS/Windows; Linux trays typically render icons
+        # at ~22-24px, so the source image looks oversized/blurry there unless scaled down.
+        if sys.platform.startswith("linux"):
+            tray_image = tray_image.resize((24, 24), Image.Resampling.LANCZOS)
+
         # Use default on Windows to get "left click to open" behaviour.
         # It looks ugly on MacOS (just a bold effect Apple never uses), so don't use it there
         make_open_studio_default = sys.platform in ("win32", "Windows")
