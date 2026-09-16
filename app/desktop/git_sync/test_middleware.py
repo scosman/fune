@@ -386,7 +386,7 @@ def test_error_mapping(git_repos, error_class, expected_status, expected_detail)
     assert body["message"] == expected_detail
 
 
-def test_git_sync_error_response_has_cors_headers():
+def test_git_sync_error_response_has_cors_headers(monkeypatch):
     """GitSyncMiddleware error short-circuits must still carry CORS headers.
 
     GitSyncMiddleware must be installed INNER to CORSMiddleware (via
@@ -396,6 +396,7 @@ def test_git_sync_error_response_has_cors_headers():
     as "origin not allowed" and the user sees "Load failed" with no error
     message instead of the descriptive git-sync error.
     """
+    monkeypatch.delenv("KILN_FRONTEND_PORT", raising=False)
     config = _auto_config("/tmp/test/clone.kiln")
     origin = "http://localhost:5173"
 
