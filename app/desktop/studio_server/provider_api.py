@@ -59,6 +59,17 @@ from app.desktop.studio_server.api_client.kiln_server_client import (
 
 logger = logging.getLogger(__name__)
 
+# Origin for the hosted Kiln API. Override with the KILN_SERVER_BASE_URL environment variable --
+# the web UI's end-to-end suite uses it to point the client at a local mock, and a self-hosted or
+# regional deployment would use it the same way. Note that the Copilot API key is sent to whatever
+# this resolves to, so it should be an origin you trust.
+DEFAULT_KILN_SERVER_BASE_URL = "https://api.kiln.tech"
+
+
+def kiln_server_base_url() -> str:
+    """Resolve the Kiln API origin, honouring KILN_SERVER_BASE_URL."""
+    return os.environ.get("KILN_SERVER_BASE_URL", DEFAULT_KILN_SERVER_BASE_URL)
+
 
 async def connect_ollama(custom_ollama_url: str | None = None) -> OllamaConnection:
     # Tags is a list of Ollama models. Proves Ollama is running, and models are available.
@@ -1035,7 +1046,7 @@ def connect_provider_api(app: FastAPI):
         if not key:
             return JSONResponse(status_code=200, content={"is_valid": False})
 
-        base_url = os.environ.get("KILN_SERVER_BASE_URL", "https://api.kiln.tech")
+        base_url = kiln_server_base_url()
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
@@ -1657,7 +1668,7 @@ async def connect_bedrock(key_data: dict):
 
 
 async def connect_kiln_copilot(key: str):
-    base_url = os.environ.get("KILN_SERVER_BASE_URL", "https://api.kiln.tech")
+    base_url = kiln_server_base_url()
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
