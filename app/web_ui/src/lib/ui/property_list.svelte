@@ -56,7 +56,7 @@
             warning_message=" "
             warning_icon="exclaim"
             warning_color="warning"
-            tight={true}
+            inline={true}
           />
         {/if}
         {#if property.use_custom_slot && $$slots.custom_value}

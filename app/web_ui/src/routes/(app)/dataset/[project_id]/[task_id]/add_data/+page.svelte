@@ -12,6 +12,8 @@
   } from "$lib/utils/splits_util"
   import { onMount, tick } from "svelte"
   import { agentInfo } from "$lib/agent"
+  import { load_task } from "$lib/stores"
+  import type { Task } from "$lib/types"
 
   const validReasons = ["generic", "eval", "fine_tune"] as const
   type Reason = (typeof validReasons)[number]
@@ -25,6 +27,9 @@
 
   let manual_dialog: Dialog | null = null
   let upload_dataset_dialog: UploadDatasetDialog | null = null
+  // The route's task, loaded so the CSV upload dialog documents the correct
+  // (single- vs multi-turn) format for the task this page targets.
+  let route_task: Task | null = null
   let splits: Record<string, number> = {}
   let splits_subtitle: string | undefined = undefined
   $: splitsArray = Object.entries(splits).map(([name, value]) => ({
@@ -36,6 +41,26 @@
     name: "Add Data",
     description: `Add data to dataset for project ID ${$page.params.project_id}, task ID ${$page.params.task_id}. Options include manual entry, file upload, synthetic generation, and eval-based generation.`,
   })
+
+  $: if ($page.params.project_id && $page.params.task_id) {
+    load_route_task($page.params.project_id, $page.params.task_id)
+  }
+
+  async function load_route_task(req_project_id: string, req_task_id: string) {
+    try {
+      const loaded = await load_task(req_project_id, req_task_id)
+      if (
+        req_project_id !== $page.params.project_id ||
+        req_task_id !== $page.params.task_id
+      )
+        return
+      route_task = loaded
+    } catch {
+      // Fall back to single-turn CSV docs if the task can't be loaded; the
+      // import still targets the route's task_id.
+      route_task = null
+    }
+  }
 
   $: dataset_link = `/dataset/${$page.params.project_id}/${$page.params.task_id}`
   $: reason = validReasons.includes(
@@ -260,4 +285,5 @@
   bind:this={upload_dataset_dialog}
   onImportCompleted={handleImportCompleted}
   tag_splits={splits}
+  turn_mode={route_task?.turn_mode ?? null}
 />

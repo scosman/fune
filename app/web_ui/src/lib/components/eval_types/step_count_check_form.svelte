@@ -30,7 +30,7 @@
   let bounds_error: string | null = null
   let bounds_touched = false
 
-  function on_bounds_blur() {
+  function on_bounds_focusout() {
     bounds_touched = true
     check_bounds(properties.min_count, properties.max_count)
   }
@@ -89,8 +89,9 @@
       value=""
     />
     <div class="ml-4 border-l border-base-300 pl-4">
+      <!-- focusout (not blur) so the event bubbles up from the inner inputs -->
       <!-- svelte-ignore a11y-no-static-element-interactions -->
-      <div on:blur={on_bounds_blur}>
+      <div on:focusout={on_bounds_focusout}>
         <div class="flex gap-4" data-testid="bounds-row">
           <div class="flex-1">
             <FormElement

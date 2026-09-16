@@ -33,6 +33,7 @@
   import Intro from "$lib/ui/intro.svelte"
   import RunConfigComparisonTable from "$lib/components/run_config_comparison_table.svelte"
   import { load_task_prompts } from "$lib/stores/prompts_store"
+  import { multiTurnStoredScoreWarning } from "./multi_turn_warning"
 
   import { agentInfo } from "$lib/agent"
   $: project_id = $page.params.project_id!
@@ -61,6 +62,10 @@
 
   let score_summary: EvalResultSummary | null = null
   let score_summary_error: KilnError | null = null
+
+  $: multi_turn_warning = multiTurnStoredScoreWarning(
+    score_summary?.multi_turn_item_count,
+  )
 
   // Note: not including score_summary_error, because it's not a critical error we should block the UI for
   $: loading =
@@ -471,6 +476,17 @@
         ]}
     action_buttons={action_buttons(evaluator)}
   >
+    <!-- Stored multi-turn conversations can't be regenerated per run config,
+      so the eval runner judges their saved messages and those rows score
+      identically across configs. Gate on the actual item set: the score
+      summary reports how many such items the eval set contains. -->
+    {#if multi_turn_warning}
+      <Warning
+        warning_color="warning"
+        warning_icon="info"
+        warning_message={multi_turn_warning}
+      />
+    {/if}
     {#if loading}
       <div class="w-full min-h-[50vh] flex justify-center items-center">
         <div class="loading loading-spinner loading-lg"></div>
@@ -530,7 +546,7 @@
                   <Warning
                     warning_message="No default judge selected. We recommend using 'Compare Judges' and selecting the best as the default."
                     warning_color="warning"
-                    tight={true}
+                    inline={true}
                   />
                 </div>
               {:else if has_default_eval_config && evaluator.current_config_id != current_eval_config_id}
@@ -540,7 +556,7 @@
                       ? "The currently selected judge is not the default. You can change the default with 'Set as default' above."
                       : "The currently selected judge is not the default. You can change the default in 'Compare Judges'."}
                     warning_color="warning"
-                    tight={true}
+                    inline={true}
                   />
                 </div>
               {/if}

@@ -567,11 +567,12 @@ describe("referenceDataUsageMode", () => {
     ).toThrow("Unexpected value")
   })
 
-  it("returns one of the four valid mode strings for every type", () => {
+  it("returns one of the valid mode strings for every type", () => {
     const validModes: ReferenceDataUsageMode[] = [
       "llm_judge",
       "reference_field",
       "code",
+      "optional",
       "none",
     ]
     for (const t of ALL_V2_EVAL_TYPES) {

@@ -208,7 +208,7 @@
         warning_message={score_key_note}
         warning_color="primary"
         warning_icon="info"
-        tight={true}
+        inline={true}
         text_size="xs"
       />
     </div>

@@ -164,14 +164,14 @@
                     <Warning
                       warning_message="Archived"
                       warning_color="warning"
-                      tight={true}
+                      inline={true}
                     />
                   {:else}
                     <Warning
                       warning_message="Ready"
                       warning_color="success"
                       warning_icon="check"
-                      tight={true}
+                      inline={true}
                     />
                   {/if}
                 </td>

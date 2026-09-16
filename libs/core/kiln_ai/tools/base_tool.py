@@ -48,6 +48,10 @@ class ToolCallResult(BaseModel):
         default=None,
         description="Human-readable error message, set when is_error is True.",
     )
+    timed_out: bool = Field(
+        default=False,
+        description="Whether the error was the tool hitting its execution time limit. Carried structurally so callers can classify timeouts without parsing output text.",
+    )
 
 
 class KilnToolInterface(ABC):

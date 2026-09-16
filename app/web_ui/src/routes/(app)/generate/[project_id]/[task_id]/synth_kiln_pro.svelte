@@ -7,8 +7,6 @@
   import { client } from "$lib/api_client"
   import { checkKilnCopilotAvailable } from "$lib/utils/copilot_utils"
   import RefiningAnimation from "$lib/ui/animations/refining_animation.svelte"
-  import IncrementUi from "$lib/ui/increment_ui.svelte"
-  import FormElement from "$lib/utils/form_element.svelte"
   import FormContainer from "$lib/utils/form_container.svelte"
   import Dialog from "$lib/ui/dialog.svelte"
   import RunConfigComponent from "$lib/ui/run_config_component/run_config_component.svelte"
@@ -16,6 +14,7 @@
   import type { KilnAgentRunConfigProperties } from "$lib/types"
   import { createKilnError, KilnError } from "$lib/utils/error_handlers"
   import SynthDataGuide from "./synth_data_guide.svelte"
+  import KilnProBatchForm from "./kiln_pro_batch_form.svelte"
   import KilnProBatchPlan from "./kiln_pro_batch_plan.svelte"
   import KilnProInputs from "./kiln_pro_inputs.svelte"
   import { SynthDataGuidanceDataModel } from "./synth_data_guidance_datamodel"
@@ -27,6 +26,8 @@
   export let session_id: string | null = null
 
   const selected_template = guidance_data.selected_template
+  const data_guide_store = guidance_data.data_guide
+  const use_data_guide_store = guidance_data.use_data_guide
   $: task = guidance_data.task
 
   let inputs_dialog: Dialog | null = null
@@ -114,7 +115,7 @@
     if (stage === "planning") return
 
     // Going back is destructive at both stages, and every route out of them —
-    // the in-app Back button, "New Batch Plan", and the browser's own back
+    // the in-app Back button, "Refine Plan", and the browser's own back
     // button — pops history. So confirm here, once, at the point the pop
     // actually happens. popstate can't be cancelled, so on "stay" we push the
     // entry back to re-sync history with the UI the user is still looking at.
@@ -256,26 +257,17 @@
       bind:submitting={batch_submitting}
       on:submit={submit_batch}
     >
-      <div class="flex flex-row items-center gap-4">
-        <div class="flex-grow font-medium text-sm">Sample Count</div>
-        <IncrementUi bind:value={num_inputs} max={200} />
-      </div>
-      <FormElement
-        id="batch_guidance"
-        label="Guidance"
-        description={`This allows you to control the dataset you are generating. For example, "10% of the dataset should be in Spanish."`}
-        inputType="textarea"
-        height="xl"
-        bind:value={batch_guidance}
-        inline_action={batch_guidance_template &&
-        batch_guidance !== batch_guidance_template
-          ? {
-              handler: () => (batch_guidance = batch_guidance_template),
-              label: "Reset",
-            }
-          : null}
+      <KilnProBatchForm
+        bind:count={num_inputs}
+        bind:guidance={batch_guidance}
+        guidance_template={batch_guidance_template}
       />
-      <SynthDataGuide {guidance_data} />
+      <SynthDataGuide
+        {project_id}
+        {task_id}
+        data_guide={$data_guide_store}
+        bind:use_data_guide={$use_data_guide_store}
+      />
     </FormContainer>
     {#if plan_error}
       <div class="text-error text-sm mt-4">

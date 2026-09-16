@@ -1,11 +1,35 @@
 import asyncio
 import logging
+import random
 from dataclasses import dataclass
 from typing import AsyncGenerator, Awaitable, Callable, Generic, List, TypeVar
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+# Each retry waits in a window this many times wider than the last, so a short
+# stall is absorbed by a single retry while a longer one still gets a real wait.
+# Windows grow fast and are never capped, which suits the small retry counts
+# callers use today (<= 2-3); raising max_retries much beyond that means
+# lowering this factor or adding a ceiling.
+RETRY_BACKOFF_FACTOR = 4.0
+
+
+def compute_retry_delay(
+    base_delay: float,
+    attempt: int,
+    random_uniform: Callable[[float, float], float] = random.uniform,
+) -> float:
+    """Seconds to wait before retry `attempt` (zero-indexed): a uniform draw
+    from the whole exponentially growing window, i.e. "full jitter".
+
+    Full jitter beats equal jitter and plain backoff under contention (AWS
+    Architecture Blog, "Exponential Backoff and Jitter"): concurrent callers
+    that failed together are spread across the window instead of retrying in
+    lockstep and colliding again.
+    """
+    return random_uniform(0.0, base_delay * RETRY_BACKOFF_FACTOR**attempt)
 
 
 @dataclass
@@ -49,7 +73,11 @@ class AsyncJobRunner(Generic[T]):
         concurrency: int = 1,
         observers: List[AsyncJobRunnerObserver[T]] | None = None,
         max_retries: int = 0,
-        retry_delay: float = 1.0,  # in seconds
+        # Width of the first backoff window, in seconds; later windows grow by
+        # RETRY_BACKOFF_FACTOR. Each wait is a random draw from its window.
+        retry_delay: float = 1.0,
+        # Injectable so tests can pin the jitter draw.
+        random_uniform: Callable[[float, float], float] = random.uniform,
     ):
         if concurrency < 1:
             raise ValueError("concurrency must be ≥ 1")
@@ -60,9 +88,15 @@ class AsyncJobRunner(Generic[T]):
         self.concurrency = concurrency
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.random_uniform = random_uniform
         self.jobs = jobs
         self.run_job_fn = run_job_fn
         self.observers = observers or []
+
+    def _compute_retry_delay(self, attempt: int) -> float:
+        """Seconds to wait before this runner's retry `attempt` (zero-indexed):
+        a jittered draw from that attempt's backoff window."""
+        return compute_retry_delay(self.retry_delay, attempt, self.random_uniform)
 
     async def notify_error(self, job: T, error: Exception):
         for observer in self.observers:
@@ -161,7 +195,7 @@ class AsyncJobRunner(Generic[T]):
                     if is_last_attempt:
                         logger.error("Job failed to complete", exc_info=e)
                         break
-                    await asyncio.sleep(self.retry_delay)
+                    await asyncio.sleep(self._compute_retry_delay(attempt))
                 except Exception as e:
                     result = False
                     last_error = e

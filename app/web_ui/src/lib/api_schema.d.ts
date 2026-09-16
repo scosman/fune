@@ -217,6 +217,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/tasks/{task_id}/available_spec_name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve an Available Spec Name
+         * @description Check a candidate spec name against the task's existing specs and
+         *     return an available one — the candidate itself, or the nearest
+         *     suffixed variant on a collision.
+         *
+         *     The check uses the derived-tag comparison the spec-save guard
+         *     enforces (case/spacing-insensitive), so a name this endpoint returns
+         *     will not 409 at save. Callers prefill suggested names through this
+         *     (the suggester is deterministic over similar inputs, so second evals
+         *     on a task collide otherwise) and validate typed names early, where a
+         *     collision costs nothing instead of surfacing after generation and
+         *     review.
+         */
+        get: operations["available_spec_name_api_projects__project_id__tasks__task_id__available_spec_name_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/tasks/{task_id}/specs": {
         parameters: {
             query?: never;
@@ -273,6 +303,23 @@ export interface paths {
         patch: operations["update_run_api_projects__project_id__tasks__task_id__runs__run_id__patch"];
         trace?: never;
     };
+    "/api/projects/{project_id}/tasks/{task_id}/runs/{run_id}/chain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run Chain */
+        get: operations["get_run_chain_api_projects__project_id__tasks__task_id__runs__run_id__chain_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/tasks/{task_id}/runs": {
         parameters: {
             query?: never;
@@ -282,7 +329,7 @@ export interface paths {
         };
         /**
          * List Runs
-         * @description For multiturn tasks, only leaf TaskRuns (those that are not the parent of another run via parent_task_run_id) are returned. Intermediate runs in a chain are filtered out. For single-turn tasks this is equivalent to listing every run.
+         * @description For multi-turn tasks, only leaf TaskRuns (those that are not the parent of another run via parent_task_run_id) are returned. Intermediate runs in a chain are filtered out. For single-turn tasks this is equivalent to listing every run.
          */
         get: operations["get_runs_api_projects__project_id__tasks__task_id__runs_get"];
         put?: never;
@@ -306,7 +353,7 @@ export interface paths {
         };
         /**
          * List Run Summaries
-         * @description For multiturn tasks, only leaf TaskRuns (those that are not the parent of another run via parent_task_run_id) are summarized.
+         * @description For multi-turn tasks, only leaf TaskRuns (those that are not the parent of another run via parent_task_run_id) are summarized. For single-turn tasks this is equivalent to summarizing every run.
          */
         get: operations["get_runs_summary_api_projects__project_id__tasks__task_id__runs_summaries_get"];
         put?: never;
@@ -397,7 +444,7 @@ export interface paths {
         };
         /**
          * List Run Tags
-         * @description Counts only include tags from leaf TaskRuns. For multiturn tasks, tags attached to intermediate runs in a chain are not included.
+         * @description Counts only include tags from leaf TaskRuns. For multi-turn tasks, tags attached to intermediate runs in a chain are not included.
          */
         get: operations["get_tags_api_projects__project_id__tasks__task_id__tags_get"];
         put?: never;
@@ -2004,6 +2051,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/tasks/{task_id}/eval_inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Eval Inputs
+         * @description List a task's eval input items, optionally restricted to a filter.
+         */
+        get: operations["get_eval_inputs_api_projects__project_id__tasks__task_id__eval_inputs_get"];
+        put?: never;
+        /**
+         * Create Eval Input
+         * @description Create an eval input item. Evals pick it up via their eval_input_filter_id, so tag it accordingly.
+         */
+        post: operations["create_eval_input_api_projects__project_id__tasks__task_id__eval_inputs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/eval_inputs/{eval_input_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Eval Input */
+        get: operations["get_eval_input_api_projects__project_id__tasks__task_id__eval_inputs__eval_input_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Eval Input
+         * @description Delete an eval input item, if nothing on disk still points at it.
+         *
+         *     409 when anything does. Both kinds of reference name the item by id and hold no
+         *     copy of it, so a delete that went through would leave records describing content
+         *     that no longer exists — an eval trace whose scenario is gone, or a score whose
+         *     input can't be read back. To take a referenced item out of an eval's scope,
+         *     retag it with PATCH instead; to correct its ground truth, PATCH its reference.
+         */
+        delete: operations["delete_eval_input_api_projects__project_id__tasks__task_id__eval_inputs__eval_input_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Eval Input
+         * @description Update an eval input item's tags and/or reference data.
+         *
+         *     `data` is not editable and sending it is a 422 — see UpdateEvalInputRequest for
+         *     why the scenario is the one field that can't change in place.
+         *
+         *     Reads `model_fields_set` rather than testing each field for None, because for
+         *     `reference` the two are genuinely different requests: omitting it leaves ground
+         *     truth alone, sending null clears it. Testing for None would make clearing
+         *     impossible and silently look like a successful no-op.
+         */
+        patch: operations["update_eval_input_api_projects__project_id__tasks__task_id__eval_inputs__eval_input_id__patch"];
+        trace?: never;
+    };
     "/api/projects/{project_id}/tasks/{task_id}/evals/{eval_id}/eval_configs": {
         parameters: {
             query?: never;
@@ -3163,11 +3273,25 @@ export interface paths {
          * Create Spec With Copilot
          * @description Create a spec using Kiln Copilot.
          *
-         *     This endpoint uses Kiln Copilot to create a spec with:
-         *     1. An eval for the spec with appropriate template
-         *     2. Batch examples via copilot API for eval, train, and golden datasets
-         *     3. A judge eval config (if judge_info provided)
-         *     4. The spec itself
+         *     This endpoint uses Kiln Copilot to create:
+         *     1. An Eval for the spec with the appropriate template
+         *     2. A judge EvalConfig (LLM-as-judge)
+         *     3. The Spec itself
+         *     Plus, per synthesis path:
+         *     - Wizard arms (`single_turn` / `multi_turn`): tag the batch's
+         *       existing runs with the golden/train filter tags — reviewed runs
+         *       become golden with the human's ratings and claim reviews,
+         *       unreviewed runs become train — and mint the eval slice as one
+         *       EvalInput per generated input (single-turn) or driven case
+         *       (multi-turn). Nothing is generated at save time.
+         *     - Legacy v1 flow (`sdg_session_config`): batch examples via the
+         *       copilot API, split into the train dataset (persisted as TaskRuns)
+         *       and the eval slice; the golden dataset is the request's
+         *       human-reviewed examples.
+         *
+         *     On every path the eval slice is EvalInput items, which the runner
+         *     runs fresh per run config at eval time — nothing stored there is
+         *     judged.
          *
          *     If you don't need copilot, use POST /spec instead.
          *
@@ -3175,6 +3299,277 @@ export interface paths {
          *     no data is persisted.
          */
         post: operations["create_spec_with_copilot_api_projects__project_id__tasks__task_id__spec_with_copilot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/eval_builder/multi_turn_pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Multi-Turn Pipeline
+         * @description The merged multi-turn stream: [drive → judge] per case.
+         *
+         *     Emits (all frames `type`-discriminated; errors carry {code, message}):
+         *       - batch_started   { batch_tag, total_cases }
+         *       - turn_completed  { case_index, turns_completed, total_turns }
+         *       - case_driven     { case_index, leaf_run_id }
+         *       - case_judged     { case_index, leaf_run_id, raw_input, raw_output,
+         *                           judge_score, judge_reasoning, total_cost }
+         *       - case_failed     { case_index, stage, code, message, error_type }
+         *                           (batch continues)
+         *       - batch_completed { judged, failed, batch_tag, total_cost }
+         *       - batch_aborted   { error, stage }  (in place of batch_completed:
+         *                           a config-scoped judge failure aborted the whole
+         *                           batch; results already streamed remain valid)
+         *       - batch_failed    { code, message }  (in place of batch_completed:
+         *                           an orchestration-level crash ended the stream;
+         *                           results already streamed remain valid)
+         *     Terminated by `data: complete`. Claims are built afterwards, per
+         *     opened trace, via build_claims.
+         */
+        post: operations["multi_turn_pipeline_api_projects__project_id__tasks__task_id__eval_builder_multi_turn_pipeline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/eval_builder/single_turn_pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Single-Turn Review Pipeline
+         * @description The single-turn stream: [run → judge] per generated input.
+         *
+         *     The one-turn sibling of multi_turn_pipeline: the task runs ONCE per
+         *     input on the target run config — tools live, the user's keys — and
+         *     each persisted, batch-tagged run is judged locally.
+         *
+         *     Emits (all frames `type`-discriminated; errors carry {code, message}):
+         *       - batch_started   { batch_tag, total_cases }
+         *       - case_driven     { case_index, leaf_run_id }
+         *       - case_judged     { case_index, leaf_run_id, raw_input, raw_output,
+         *                           judge_score, judge_reasoning, total_cost,
+         *                           trace }
+         *       - case_failed     { case_index, stage: "run" | "judge", code,
+         *                           message, error_type }  (batch continues)
+         *       - batch_completed { judged, failed, batch_tag, total_cost }
+         *       - batch_aborted   { error, stage }  (in place of batch_completed:
+         *                           a config-scoped judge failure aborted the whole
+         *                           batch; results already streamed remain valid)
+         *       - batch_failed    { code, message }  (in place of batch_completed:
+         *                           an orchestration-level crash ended the stream;
+         *                           results already streamed remain valid)
+         *     Terminated by `data: complete`. No turn frames appear on this stream
+         *     (each case is one run). raw_input is the run's own input string,
+         *     kept verbatim because the saved eval reads that same string back;
+         *     raw_output is the role-labelled transcript rendering, not the closing
+         *     message. `trace` is the run's structured trace (tool calls included)
+         *     and is what the judge scored, matching what the saved eval will
+         *     score. Claims are built afterwards, per opened trace, via
+         *     build_claims.
+         */
+        post: operations["single_turn_pipeline_api_projects__project_id__tasks__task_id__eval_builder_single_turn_pipeline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/eval_builder/judge_traces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Judge Saved Eval-Builder Results
+         * @description Re-judge previously driven results: [reload → judge] per case.
+         *
+         *     The judge calibration loop's re-score stream, both arms: after a
+         *     refine produces a new judge prompt, this scores the SAME saved
+         *     results again. Each run is reloaded from disk by id; multi-turn
+         *     judges the chain leaf's stored trace, single-turn the run's own —
+         *     either way the judge input matches what the saved eval will judge.
+         *     Nothing is driven and nothing is written.
+         *
+         *     Emits (all frames `type`-discriminated; errors carry {code, message}):
+         *       - batch_started   { batch_tag: "", total_cases }
+         *       - case_judged     { case_index, leaf_run_id, raw_input, raw_output,
+         *                           judge_score, judge_reasoning, total_cost: 0,
+         *                           trace }
+         *       - case_failed     { case_index, stage: "judge", code, message,
+         *                           error_type }
+         *                           (batch continues; a run that cannot be
+         *                           reloaded fails with code trace_not_found,
+         *                           missing_trace, or missing_output)
+         *       - batch_completed { judged, failed, batch_tag: "", total_cost: 0 }
+         *       - batch_aborted   { error, stage: "judge" }  (in place of
+         *                           batch_completed: a config-scoped judge failure
+         *                           aborted the whole batch; results already
+         *                           streamed remain valid)
+         *       - batch_failed    { code, message }  (in place of batch_completed:
+         *                           an orchestration-level crash ended the stream;
+         *                           results already streamed remain valid)
+         *     Terminated by `data: complete`. case_index is the position in
+         *     leaf_run_ids; no drive or turn frames appear on this stream. Claims
+         *     are built afterwards, per opened trace, via build_claims.
+         */
+        post: operations["judge_traces_api_projects__project_id__tasks__task_id__eval_builder_judge_traces_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/eval_builder/build_claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build Claims
+         * @description Claims-only primitive: build claims for one trace given a known verdict.
+         *
+         *     The multi-turn review's claims path: the pipeline stream stops at the
+         *     judge, and the client calls this per trace the reviewer opens (under
+         *     subset review most traces are never opened). Also used by the refine
+         *     loop to regenerate claims without re-running the judge.
+         */
+        post: operations["build_claims_api_projects__project_id__tasks__task_id__eval_builder_build_claims_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/eval_builder/preflight_model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preflight a Model Lane
+         * @description One cheap completion through the SAME adapter model/provider
+         *     resolution a real run uses (that resolution is where a dead model
+         *     surfaces), on the user's same keys. Catches key/billing/deprecation/
+         *     unreachable failures for a lane BEFORE the drive commits the
+         *     plan/SU-gen minutes and the batch's model spend. Explicitly does NOT
+         *     validate tools/MCP or mid-run rate limits. Nothing persists:
+         *     allow_saving=False, so no TaskRun lands in the dataset — same as
+         *     the transient review judge.
+         */
+        post: operations["preflight_model_api_projects__project_id__tasks__task_id__eval_builder_preflight_model_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/eval_builder/author_judge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Author Judge
+         * @description Author a spec-tailored judge prompt for the review — both arms.
+         *
+         *     Returns the PROMPT only — the judge model is the user's pick. Both
+         *     arms judge a transcript, so both rubrics are authored against one:
+         *     the rubric arrives knowing the role labels and tool-call blocks its
+         *     judge will meet, whatever the task's turn mode.
+         *     Authoring is a REQUIRED step of the drive: an error here stops the
+         *     drive on a retryable error client-side. There is no fallback judge.
+         */
+        post: operations["author_judge_api_projects__project_id__tasks__task_id__eval_builder_author_judge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/eval_builder/refine_judge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refine Judge
+         * @description Propose a judge-prompt revision from the human's per-claim grades.
+         *
+         *     The refined prompt is a PROPOSAL — the UI validates it and shows the
+         *     changes for approval; it is never auto-applied.
+         */
+        post: operations["refine_judge_api_projects__project_id__tasks__task_id__eval_builder_refine_judge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/multiturn_sdg/generate_cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate Multi-Turn SU Cases */
+        post: operations["generate_cases_api_projects__project_id__tasks__task_id__multiturn_sdg_generate_cases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/multiturn_sdg/run_cases_batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Multi-Turn SU Cases Batch */
+        post: operations["stream_run_cases_batch_api_projects__project_id__tasks__task_id__multiturn_sdg_run_cases_batch_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4188,6 +4583,35 @@ export interface components {
             /** Id */
             id: string;
         };
+        /**
+         * AuthorJudgeApiInput
+         * @description The spec + target-task prompt the judge author tailors its rubric to.
+         *
+         *     One authoring path for both arms: same two inputs, prompt-only output —
+         *     the judge model stays the caller's choice. Both arms judge a transcript,
+         *     so the rubric is always authored against one; the framing is fixed
+         *     server-side rather than client-sent.
+         */
+        AuthorJudgeApiInput: {
+            /** Target Specification */
+            target_specification: string;
+            /** Target Task Prompt */
+            target_task_prompt: string;
+            /**
+             * Run Config Id
+             * @description The task run config the eval is written against. Its tools and skills are what the rubric grades tool and skill use over. Omit to use the task's default run config.
+             */
+            run_config_id?: string | null;
+        };
+        /**
+         * AuthorJudgeApiOutput
+         * @description The authored judge prompt — plain text, rendered into the judge
+         *     harness verbatim.
+         */
+        AuthorJudgeApiOutput: {
+            /** Judge Prompt */
+            judge_prompt: string;
+        };
         /** AvailableModels */
         AvailableModels: {
             /** Provider Name */
@@ -4218,6 +4642,22 @@ export interface components {
              * @enum {string}
              */
             provider_type: "builtin" | "custom";
+        };
+        /**
+         * AvailableSpecNameResponse
+         * @description An available spec name resolved from a candidate.
+         */
+        AvailableSpecNameResponse: {
+            /**
+             * Name
+             * @description The candidate itself when free, else the nearest available suffixed variant.
+             */
+            name: string;
+            /**
+             * Was Taken
+             * @description Whether the candidate collided with an existing spec (and `name` is therefore a suffixed variant).
+             */
+            was_taken: boolean;
         };
         /**
          * BackgroundJobStatus
@@ -4379,6 +4819,39 @@ export interface components {
             file: string;
         };
         /**
+         * BuildClaimsApiInput
+         * @description One trace + its judge decision, to distill into claim/evidence pairs.
+         *
+         *     The claims-only primitive: use when a verdict is already known (e.g. the
+         *     refine loop re-generating claims without re-running the judge).
+         */
+        BuildClaimsApiInput: {
+            /** Raw Input */
+            raw_input: string;
+            /** Raw Output */
+            raw_output: string;
+            /** Eval Rubric */
+            eval_rubric: string;
+            /** Judge Reasoning */
+            judge_reasoning: string;
+            /**
+             * Judge Score
+             * @enum {string}
+             */
+            judge_score: "pass" | "fail";
+        };
+        /**
+         * BuildClaimsApiOutput
+         * @description The review card for one trace: the overview, then one to eight claims
+         *     in the order the reviewer reads them. The verdict claim, when the builder
+         *     wrote one, is the last claim and carries `is_verdict`.
+         */
+        BuildClaimsApiOutput: {
+            overview: components["schemas"]["OverviewApi"];
+            /** Claims */
+            claims: components["schemas"]["ClaimApi"][];
+        };
+        /**
          * BuildPromptRequest
          * @description Request to build a prompt from examples.
          */
@@ -4437,6 +4910,11 @@ export interface components {
              * @description The number of task runs imported.
              */
             imported_count: number;
+            /**
+             * Imported Conversation Count
+             * @description The number of conversations imported. None for single-turn uploads; set for multiturn uploads (where one row = one conversation that materializes as multiple TaskRuns linked via parent_task_run_id).
+             */
+            imported_conversation_count?: number | null;
         };
         /**
          * ChatCompletionAssistantMessageParamWrapper
@@ -4732,10 +5210,97 @@ export interface components {
          */
         ChunkerType: "fixed_window" | "semantic";
         /**
+         * CitationApi
+         * @description A start+end anchor into the trace; the UI highlights from `from` to `to`.
+         *
+         *     `from` is a Python keyword, so the field is `from_` with an alias — the
+         *     serialized key MUST stay `from` (the UI greps that literal JSON key).
+         */
+        CitationApi: {
+            /** Marker */
+            marker: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "input" | "output";
+            /** From */
+            from: string;
+            /** To */
+            to: string;
+        };
+        /**
+         * ClaimApi
+         * @description One decision the judge made, written so the reviewer can vote on it.
+         *
+         *     `text` carries the claim, its evidence and its [n] markers in one string;
+         *     every marker resolves through `citations`. Grades have one direction:
+         *     agree means the judge got this decision right, disagree means it got it
+         *     wrong.
+         *
+         *     `is_verdict` marks the claim that states the overall pass/fail. The claim
+         *     builder may omit it, and only the LAST claim can be one, so the UI needs a
+         *     flag rather than a guess: it decides whether to derive the reviewer's
+         *     overall call from that claim's grade or to ask for it outright. The studio
+         *     sets the flag from the builder's own convention (the verdict claim opens
+         *     "It passes" or "It fails", and no other claim may) so the UI never
+         *     pattern-matches prose.
+         */
+        ClaimApi: {
+            /** Text */
+            text: string;
+            /** Citations */
+            citations: components["schemas"]["CitationApi"][];
+            /** Is Verdict */
+            is_verdict: boolean;
+        };
+        /**
+         * ClaimReviewApi
+         * @description The reviewer's grades on one trace's claim summary.
+         *
+         *     Mirrors the persisted ClaimReview shape (judge verdict, the overview,
+         *     every claim with its agree/disagree and optional why, and the reviewer's
+         *     overall call) so the save path can write it onto the golden TaskRun and
+         *     judge refinement can consume it later.
+         */
+        ClaimReviewApi: {
+            /**
+             * Judge Score
+             * @enum {string}
+             */
+            judge_score: "pass" | "fail";
+            /** Judge Reasoning */
+            judge_reasoning: string;
+            /** Overview */
+            overview: string;
+            /** Claims */
+            claims: components["schemas"]["GradedClaim"][];
+            /**
+             * Human Verdict
+             * @enum {string}
+             */
+            human_verdict: "pass" | "fail";
+        };
+        /**
          * ClarifySpecApiInput
          * @description Input for clarifying a spec with copilot.
          */
         ClarifySpecApiInput: {
+            /**
+             * Project Id
+             * @description The project holding the target task. Pair with task_id to have the server attach the task's tools and skills.
+             */
+            project_id?: string | null;
+            /**
+             * Task Id
+             * @description The target task. Pair with project_id to have the server attach the task's tools and skills.
+             */
+            task_id?: string | null;
+            /**
+             * Run Config Id
+             * @description The task run config whose tools and skills to attach — the one this request is about, such as the run config an eval is being written against. Omit to use the task's default run config.
+             */
+            run_config_id?: string | null;
             target_task_info: components["schemas"]["TaskInfoApi"];
             /** Target Specification */
             target_specification: string;
@@ -5148,6 +5713,29 @@ export interface components {
             provider?: components["schemas"]["ModelProviderName"] | null;
         };
         /**
+         * CreateEvalInputRequest
+         * @description Request to create an eval input item.
+         */
+        CreateEvalInputRequest: {
+            /**
+             * Data
+             * @description The input data for this eval item. A multi_turn_synthetic item must carry both a drive_config and a first_message with non-empty text: they are what make it re-drivable, and neither can be added after the item is created.
+             */
+            data: components["schemas"]["SingleTurnEvalInputData"] | components["schemas"]["MultiTurnSyntheticEvalInputData-Input"];
+            /**
+             * Reference
+             * @description Optional reference data (ground truth) for this eval input, keyed by reference name.
+             */
+            reference?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /**
+             * Tags
+             * @description Tags for filtering eval inputs (matched by tag:: eval_input_filter_ids).
+             */
+            tags?: string[];
+        };
+        /**
          * CreateEvaluatorRequest
          * @description Request to create a new evaluator.
          */
@@ -5467,17 +6055,34 @@ export interface components {
          * CreateSpecWithCopilotRequest
          * @description Request model for creating a spec with Kiln Copilot.
          *
-         *     This endpoint uses Kiln Copilot to:
-         *     - Generate batch examples for eval, train, and golden datasets
-         *     - Create a judge eval config
-         *     - Create an eval with appropriate template/output scores
-         *     - Create and save the spec
+         *     Three synthesis paths are supported, exactly one must be set per request:
          *
-         *     If you don't want to use copilot, use the regular POST /spec endpoint instead.
+         *     - **Single-turn (wizard):** caller supplies `single_turn` with a
+         *       `batch_tag` pointing at runs already on disk (created by the eval
+         *       builder's single_turn_pipeline) plus the review verdicts and the
+         *       generated inputs. Endpoint tags the existing runs with golden/train
+         *       filter tags (writing the verdicts onto the golden ones) and mints one
+         *       EvalInput per input as the eval slice; no new TaskRuns are created and
+         *       nothing is generated. `evaluate_full_trace` must be True — the
+         *       pipeline judged the transcript, so the saved eval must too.
+         *
+         *     - **Multi-turn (wizard):** caller supplies `multi_turn` with a `batch_tag`
+         *       pointing at chains already on disk (created earlier by the
+         *       synthetic-user runner) plus the driven cases and drive settings.
+         *       Endpoint tags the existing chain leaves with golden/train filter tags
+         *       and mints one EvalInput per driven case as the eval slice; no new
+         *       TaskRuns are created. `evaluate_full_trace` must be True.
+         *
+         *     - **Legacy single-turn (v1 manual flow):** caller supplies
+         *       `sdg_session_config`. Endpoint calls `generate_copilot_examples` for
+         *       fresh I/O pairs, splits them into eval/train/golden datasets, and tags
+         *       new TaskRuns.
+         *
+         *     If you don't want copilot at all, use POST /spec instead.
          *
          *     The client is responsible for building:
-         *     - definition: The spec definition string (use buildSpecDefinition on client)
-         *     - properties: The spec properties object (filtered, with spec_type included)
+         *     - definition: the spec definition string (buildSpecDefinition on client)
+         *     - properties: the spec properties object (filtered, with spec_type included)
          */
         CreateSpecWithCopilotRequest: {
             /** Name */
@@ -5499,19 +6104,19 @@ export interface components {
             evaluate_full_trace: boolean;
             /** Reviewed Examples */
             reviewed_examples?: components["schemas"]["ReviewedExample"][];
-            judge_info: components["schemas"]["SyntheticDataGenerationStepConfigApi"];
-            sdg_session_config: components["schemas"]["SyntheticDataGenerationSessionConfigApi"];
-            /**
-             * Task Description
-             * @default
-             */
-            task_description: string;
-            /**
-             * Task Prompt With Example
-             * @default
-             */
-            task_prompt_with_example: string;
+            /** @description The judge to persist as the eval's V2 config — the same shape (and, from the builder, the same values) the review step ran, so the calibrated judge is the one that ships. */
+            judge_info: components["schemas"]["JudgeConfig"];
+            sdg_session_config?: components["schemas"]["SyntheticDataGenerationSessionConfigApi"] | null;
+            multi_turn?: components["schemas"]["MultiTurnSaveInfo"] | null;
+            single_turn?: components["schemas"]["SingleTurnSaveInfo"] | null;
+            /** Task Prompt With Example */
+            task_prompt_with_example?: string | null;
             task_sample?: components["schemas"]["TaskSample"] | null;
+            /**
+             * Run Config Id
+             * @description Legacy `sdg_session_config` path only: the run config whose tools and skills describe the target task while examples are generated. Omit to use the task's default run config. The wizard arms generate nothing here, so they read no capabilities and this field does not apply to them.
+             */
+            run_config_id?: string | null;
         };
         /**
          * CreateTaskFromToolRequest
@@ -5776,8 +6381,7 @@ export interface components {
          *       `# Presentation Defaults`.
          *     - **Kiln Pro / Copilot flow** (analyze pipeline): only `# Semantics`,
          *       `# Style`, `# Presentation Defaults` — the analyze prompt derives rules
-         *       from input documents rather than quoting them, matching Mike's
-         *       GENERATE_CORPUS_GUIDELINES vocabulary.
+         *       from input documents rather than quoting them.
          *
          *     The metaprompter treats the whole body as one editable artifact and returns
          *     a refined version on each refine pass; refine auto-detects which shape it
@@ -6104,6 +6708,30 @@ export interface components {
             is_empty: boolean;
         };
         /**
+         * DrivenSyntheticCaseApi
+         * @description One driven synthetic-user case from the builder session.
+         *
+         *     The save path mints an EvalInput from each — the re-drivable input the
+         *     eval runner regenerates a conversation from, per run config.
+         */
+        DrivenSyntheticCaseApi: {
+            /**
+             * Seed Prompt
+             * @description The opening user-side message of the conversation.
+             */
+            seed_prompt: string;
+            /**
+             * Synthetic User Info
+             * @description The XML-tagged persona blob as generated (persona/goal/behavior_guidance). Wire format only: the save path parses it into the structured submodel before anything persists.
+             */
+            synthetic_user_info: string;
+            /**
+             * Scenario Index
+             * @description Zero-based index into the builder's user-approved scenario plan identifying the scenario this case was generated from. Recorded on the minted EvalInput as a `scenario:{index}` provenance tag; omit when the case has no plan scenario.
+             */
+            scenario_index?: number | null;
+        };
+        /**
          * EmbeddingConfig
          * @description Configuration for generating embeddings from document chunks.
          */
@@ -6414,9 +7042,9 @@ export interface components {
              * Properties
              * @description Properties to be used to execute the eval config. Legacy configs use a dict; V2 configs use typed properties.
              */
-            properties?: (components["schemas"]["LlmJudgeProperties"] | components["schemas"]["ExactMatchProperties"] | components["schemas"]["PatternMatchProperties"] | components["schemas"]["SetCheckProperties"] | components["schemas"]["ToolCallCheckProperties"] | components["schemas"]["ContainsProperties"] | components["schemas"]["StepCountCheckProperties"] | components["schemas"]["CodeEvalProperties"]) | {
+            properties?: {
                 [key: string]: unknown;
-            } | null;
+            } | (components["schemas"]["LlmJudgeProperties"] | components["schemas"]["ExactMatchProperties"] | components["schemas"]["PatternMatchProperties"] | components["schemas"]["SetCheckProperties"] | components["schemas"]["ToolCallCheckProperties"] | components["schemas"]["ContainsProperties"] | components["schemas"]["StepCountCheckProperties"] | components["schemas"]["CodeEvalProperties"]) | null;
             /** Model Type */
             readonly model_type: string;
         };
@@ -6504,6 +7132,61 @@ export interface components {
          */
         EvalDataType: "final_answer" | "full_trace" | "reference_answer";
         /**
+         * EvalInput
+         * @description A single evaluation input item, stored as a child of a Task.
+         *
+         *     Each EvalInput contains the data needed to run an evaluation (e.g. a user
+         *     message) plus optional reference data for comparison and tags for filtering.
+         */
+        EvalInput: {
+            /**
+             * V
+             * @description Schema version for migration support.
+             * @default 1
+             */
+            v: number;
+            /**
+             * Id
+             * @description Unique identifier for this record.
+             */
+            id?: string | null;
+            /**
+             * Path
+             * @description File system path where the record is stored.
+             */
+            path?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             * @description Timestamp when the model was created. Timezone-aware; stores the writer's local offset.
+             */
+            created_at?: string;
+            /**
+             * Created By
+             * @description User ID of the creator.
+             */
+            created_by?: string;
+            /**
+             * Data
+             * @description The input data for this eval item.
+             */
+            data: components["schemas"]["SingleTurnEvalInputData"] | components["schemas"]["MultiTurnSyntheticEvalInputData-Output"];
+            /**
+             * Reference
+             * @description Optional reference data (ground truth) for this eval input, keyed by reference name.
+             */
+            reference?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /**
+             * Tags
+             * @description Tags for filtering eval inputs.
+             */
+            tags?: string[];
+            /** Model Type */
+            readonly model_type: string;
+        };
+        /**
          * EvalInputSplit
          * @description A split whose items are EvalInputs, selected by an eval-input filter.
          */
@@ -6517,6 +7200,22 @@ export interface components {
             filter_id: string;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * EvalInputsResponse
+         * @description A task's eval input items, plus how many item files this version of Kiln couldn't read.
+         */
+        EvalInputsResponse: {
+            /**
+             * Eval Inputs
+             * @description The eval input items which loaded successfully.
+             */
+            eval_inputs: components["schemas"]["EvalInput"][];
+            /**
+             * Load Error Count
+             * @description How many eval input files failed to load. Usually because they were written by a newer version of Kiln.
+             */
+            load_error_count: number;
         };
         /**
          * EvalItemSource
@@ -6627,6 +7326,11 @@ export interface components {
              * @description Total size of the eval dataset.
              */
             dataset_size: number;
+            /**
+             * Multi Turn Item Count
+             * @description Items in the eval dataset that are stored multi-turn conversations. These are scored from their saved conversation, so every run config receives identical scores for them.
+             */
+            multi_turn_item_count: number;
         };
         /**
          * EvalResultsSummaryEvalInfo
@@ -6716,11 +7420,14 @@ export interface components {
          * EvalRun
          * @description The scores an eval produced for a single dataset item.
          *
-         *     This is a child of an EvalConfig, which specifies how the scores were generated.
-         *
-         *     Eval runs can be one of 2 types:
-         *     1) eval_config_eval=False (scoring): we were evaluating a task run config (a method of running the task). We take the item's input, run the task with the task_run_config, then run the evaluator on that output. task_run_config_id must be set.
-         *     2) eval_config_eval=True (calibration): we were evaluating an eval config (a method of evaluating the task). We used an existing human-rated dataset item's input/output, and ran the evaluator on it. task_run_config_id must be None.
+         *     A run serves one of two purposes:
+         *     - eval_config_eval=False (scoring): evaluating a task run config — the item's
+         *       input was run through the task with task_run_config_id (which must be set)
+         *       and the evaluator scored that output.
+         *     - eval_config_eval=True (calibration): evaluating the eval config itself — an
+         *       existing human-rated dataset item's input and output were scored so the
+         *       evaluator can be compared against those human ratings. task_run_config_id
+         *       must be None.
          *
          *     A record is described by two independent facts — whether it points at a TaskRun, and
          *     whether it was skipped — which `validate_record_mode` constrains to three legal
@@ -6873,15 +7580,15 @@ export interface components {
          *     Where the trace lives depends on the record: on a TaskRun named by `scored_run_id`,
          *     inline on the EvalRun for records written before the trace/score split, or nowhere at
          *     all for a run that was skipped before anything was generated. This resolves whichever
-         *     applies - falling back to the dataset item for the input of that last kind - so
-         *     callers see one shape regardless of which it is.
+         *     applies - falling back to the dataset item for the input whenever the record
+         *     itself has none - so callers see one shape regardless of which it is.
          */
         EvalRunWithTrace: {
             /** @description The score record itself. */
             eval_run: components["schemas"]["EvalRun"];
             /**
              * Input
-             * @description The input the task was run on. From the scored TaskRun, from the EvalRun itself for legacy records, or from the dataset item for records that were skipped before anything was generated.
+             * @description The input the task was run on. From the scored TaskRun, from the EvalRun itself for legacy records, or from the dataset item whenever neither of those has it (pre-generation skips, and pointer records whose trace is missing).
              */
             input: string | null;
             /**
@@ -7817,6 +8524,28 @@ export interface components {
                 [key: string]: components["schemas"]["SampleApi"][];
             };
         };
+        /** GenerateCasesApiInput */
+        GenerateCasesApiInput: {
+            /** Target Specification */
+            target_specification: string;
+            /** Num Cases */
+            num_cases: number;
+            /**
+             * Case Prompts
+             * @description Optional per-case scenario prompts (e.g. from an approved batch plan). When provided, case i is designed around prompt i and each returned case carries scenario_index. Under the upstream salvage contract a flaky case is dropped rather than failing the batch, so the response may hold fewer cases than prompts — scenario_index, not position, maps a case to its prompt. Length must equal num_cases.
+             */
+            case_prompts?: string[] | null;
+        };
+        /** GenerateCasesApiOutput */
+        GenerateCasesApiOutput: {
+            /**
+             * Cases
+             * @description A SyntheticUserCase. Shape: {seed_prompt: str, synthetic_user_info: str, scenario_index?: int | null}. The synthetic_user_info value is an XML-tagged blob: <persona>...</persona><goal>...</goal><behavior_guidance>...</behavior_guidance>. Parsed client-side by kiln_ai.synthetic_user.parser. scenario_index is set only on scenario batches (generate_cases with case_prompts) and maps the case back to its plan prompt.
+             */
+            cases: {
+                [key: string]: unknown;
+            }[];
+        };
         /** GenerateInputsBatchInput */
         GenerateInputsBatchInput: {
             /**
@@ -7943,6 +8672,65 @@ export interface components {
              * @default false
              */
             has_oauth_token: boolean;
+        };
+        /**
+         * GradedClaim
+         * @description One claim with a human grade on it.
+         *
+         *     A claim is one decision the judge made, written so the reviewer can vote
+         *     on it from the card alone. Grades have one direction on every claim:
+         *     agree means the judge got that decision right, disagree means it got it
+         *     wrong. The claim text carries its own evidence and citation markers.
+         */
+        GradedClaim: {
+            /**
+             * Text
+             * @description The claim as shown to the reviewer.
+             */
+            text: string;
+            /**
+             * Human Grade
+             * @description The human's grade on this claim.
+             * @enum {string}
+             */
+            human_grade: "agree" | "disagree";
+            /**
+             * Human Feedback
+             * @description Optional plaintext reason for the grade.
+             */
+            human_feedback?: string | null;
+        };
+        /**
+         * GradedTraceApi
+         * @description One human-reviewed trace's grades, shaped to feed judge refinement.
+         *
+         *     Mirrors the persisted ClaimReview (judge verdict, the overview, every
+         *     claim with its agree/disagree and optional why, and the reviewer's
+         *     overall call) plus a `trace_label` the refine model cites in its change
+         *     rationales.
+         */
+        GradedTraceApi: {
+            /**
+             * Trace Label
+             * @description A label for the trace the refine model cites in its rationales; derived UI-side from the run id (often opaque).
+             */
+            trace_label: string;
+            /**
+             * Judge Score
+             * @enum {string}
+             */
+            judge_score: "pass" | "fail";
+            /** Judge Reasoning */
+            judge_reasoning: string;
+            /** Overview */
+            overview: string;
+            /** Claims */
+            claims: components["schemas"]["GradedClaim"][];
+            /**
+             * Human Verdict
+             * @enum {string}
+             */
+            human_verdict: "pass" | "fail";
         };
         /** GuidePreviewInput */
         GuidePreviewInput: {
@@ -8267,6 +9055,38 @@ export interface components {
          */
         JobStatus: "cancelled" | "failed" | "pending" | "running" | "succeeded";
         JsonValue: unknown;
+        /**
+         * JudgeConfig
+         * @description The judge: a plain-text prompt plus the model that runs it.
+         *
+         *     The ONE judge shape across the builder — the review step runs it
+         *     transiently and the save path persists it as a V2 EvalConfig, both through
+         *     the same prompt-template wrap, so the judge the user calibrates is the
+         *     judge that ships.
+         */
+        JudgeConfig: {
+            /** Prompt */
+            prompt: string;
+            /** Model Name */
+            model_name: string;
+            model_provider: components["schemas"]["ModelProviderName"];
+        };
+        /**
+         * JudgeTracesRequest
+         * @description The re-judge request, both arms: score previously driven results with
+         *     a (typically refined) judge. No drive fields — the runs already exist on
+         *     disk, identified by the ids the pipeline streams echoed on their
+         *     case_driven/case_judged frames (the chain leaf on multi-turn, the run
+         *     itself on single-turn).
+         */
+        JudgeTracesRequest: {
+            /**
+             * Leaf Run Ids
+             * @description TaskRun ids of the driven results to judge: chain-leaf ids on a multi-turn task, the pipeline's run ids on a single-turn one. Frames reference each case by its position in this list (case_index).
+             */
+            leaf_run_ids: string[];
+            judge: components["schemas"]["JudgeConfig"];
+        };
         /**
          * KilnAgentRunConfigProperties
          * @description A configuration for running a task using a Kiln AI agent.
@@ -8896,6 +9716,8 @@ export interface components {
             supports_logprobs: boolean;
             /** Suggested For Evals */
             suggested_for_evals: boolean;
+            /** Suggested For Synthetic User */
+            suggested_for_synthetic_user: boolean;
             /** Supports Function Calling */
             supports_function_calling: boolean;
             /** Uncensored */
@@ -8943,6 +9765,142 @@ export interface components {
          * @enum {string}
          */
         ModelProviderName: "openai" | "groq" | "amazon_bedrock" | "ollama" | "openrouter" | "fireworks_ai" | "kiln_fine_tune" | "kiln_custom_registry" | "openai_compatible" | "anthropic" | "gemini_api" | "azure_openai" | "huggingface" | "vertex" | "together_ai" | "siliconflow_cn" | "cerebras" | "docker_model_runner" | "featherless_ai";
+        /**
+         * MultiTurnDriveConfig
+         * @description Settings for re-driving a multi-turn synthetic input at eval time.
+         *
+         *     A multi-turn eval run regenerates each conversation: the agent under test
+         *     comes from the run config being evaluated, while the synthetic user
+         *     (customer) configured here is held constant across run configs — so a
+         *     comparison varies only the agent. Stored per item, on
+         *     MultiTurnSyntheticEvalInputData.drive_config.
+         */
+        MultiTurnDriveConfig: {
+            /**
+             * Model Name
+             * @description The model that plays the synthetic user during re-drives.
+             */
+            model_name: string;
+            /**
+             * Model Provider
+             * @description The provider of the synthetic-user model.
+             */
+            model_provider: string;
+            /**
+             * Turns
+             * @description Ceiling on the assistant turns per re-driven conversation.
+             */
+            turns: number;
+        };
+        /**
+         * MultiTurnPipelineRequest
+         * @description The merged multi-turn pipeline's request: everything a drive takes
+         *     (inherited — the two drive contracts can't drift) plus the judge that
+         *     scores the results and the batch lifecycle fields.
+         *
+         *     `judge.prompt` is also what the client later passes to build_claims as
+         *     the eval_rubric — the claim builder pressure-tests the rubric the
+         *     verdict was really produced under.
+         */
+        MultiTurnPipelineRequest: {
+            /**
+             * Replace Batch Tags
+             * @description Batch tags of previous drives this one supersedes (aborted re-drives can leave several behind). Their runs are deleted once this drive has produced replacements (delete-on-redrive), so abandoned batches don't accumulate on disk — and a wholesale drive failure never destroys the only batch the user has.
+             */
+            replace_batch_tags?: string[];
+            /**
+             * Target Run Config
+             * @description Inline run config for the target task, used verbatim — the same full properties shape a manual run sends, tools included. For driving a config that isn't worth saving (ad-hoc experiments, scripting). Must be a Kiln agent config. Exactly one of target_run_config / target_run_config_id is required.
+             */
+            target_run_config?: (components["schemas"]["KilnAgentRunConfigProperties"] | components["schemas"]["McpRunConfigProperties"]) | null;
+            /**
+             * Target Run Config Id
+             * @description ID of one of the target task's saved run configs. The drive uses the saved config verbatim — model, prompt, sampling, and tools — so the agent under test behaves exactly like a manual run, and driven runs attribute back to the config. Exactly one of target_run_config / target_run_config_id is required.
+             */
+            target_run_config_id?: string | null;
+            /**
+             * Cases
+             * @description Cases as returned by /generate_cases, optionally edited. A SyntheticUserCase. Shape: {seed_prompt: str, synthetic_user_info: str, scenario_index?: int | null}. The synthetic_user_info value is an XML-tagged blob: <persona>...</persona><goal>...</goal><behavior_guidance>...</behavior_guidance>. Parsed client-side by kiln_ai.synthetic_user.parser. scenario_index is set only on scenario batches (generate_cases with case_prompts) and maps the case back to its plan prompt.
+             */
+            cases: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Turns
+             * @description Ceiling on the assistant turns produced per case.
+             * @default 5
+             */
+            turns: number;
+            su_driver: components["schemas"]["SyntheticUserDriverSpec"];
+            /**
+             * Batch Tag
+             * @description Optional user-supplied batch label. Constrained to [A-Za-z0-9_-]{1,64} so it can safely be used as a tag on leaf TaskRuns. Auto-generated if not provided.
+             */
+            batch_tag?: string | null;
+            judge: components["schemas"]["JudgeConfig"];
+        };
+        /**
+         * MultiTurnSaveInfo
+         * @description Identifies an existing multi-turn synthetic-user batch to turn into an Eval.
+         *
+         *     The endpoint splits the chains tagged with this batch_tag into golden and
+         *     train slices, and mints the eval slice as EvalInput items from `cases` —
+         *     the re-drivable inputs the eval runner regenerates conversations from,
+         *     per run config, using `drive_config` as the synthetic user.
+         */
+        MultiTurnSaveInfo: {
+            /**
+             * Batch Tag
+             * @description The batch_tag emitted by the multi-turn synthetic-user runner (see kiln_ai.synthetic_user.runner). Identifies the set of conversation chains already persisted to disk that this Eval should evaluate.
+             */
+            batch_tag: string;
+            /**
+             * Reviewed Chains
+             * @description The human's review verdicts, one per reviewed chain keyed by leaf TaskRun id. Each becomes a golden RequirementRating on the chain leaf (plus Feedback / per-claim grades when present).
+             */
+            reviewed_chains?: components["schemas"]["ReviewedChainApi"][];
+            /**
+             * Cases
+             * @description The driven synthetic-user cases of this batch. Each is minted as an EvalInput — the eval slice the runner re-drives per run config at eval time.
+             */
+            cases: components["schemas"]["DrivenSyntheticCaseApi"][];
+            /** @description The alignment-time drive settings (synthetic-user model + turn count), stamped on each minted EvalInput so eval-time re-drives match the conversations the judge was calibrated on. */
+            drive_config: components["schemas"]["MultiTurnDriveConfig"];
+        };
+        /**
+         * MultiTurnSyntheticEvalInputData
+         * @description A re-drivable multi-turn case: the opening user message, the synthetic
+         *     user who continues the conversation at eval time, and the drive settings
+         *     that synthetic user runs with.
+         *
+         *     Together these make the item a self-contained replication recipe: with the
+         *     persona, first_message, and drive_config it re-drives identically under any
+         *     eval that references it, which is what makes conversation traces keyed to
+         *     the item reusable across evals.
+         *
+         *     first_message may be None; such items carry no seed to open a
+         *     conversation with, so the eval runner skips them instead of re-driving.
+         */
+        "MultiTurnSyntheticEvalInputData-Input": {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "multi_turn_synthetic";
+            first_message?: components["schemas"]["UserMessage"] | null;
+            synthetic_user_info: components["schemas"]["SyntheticUserInfo"];
+            /** @description How this item's conversation is re-driven: the synthetic-user model and turn count, stamped when the item is minted. This is the ONLY home for drive settings — no eval-level copy exists; displays and prefills derive from items. Held constant across run configs so a comparison varies only the agent under test. Immutable once minted: changing the synthetic-user setup means minting new items, which keeps traces keyed to this item valid. None only on items minted before drive settings were stamped; the eval runner skips such items with a clear reason rather than guessing a config. */
+            drive_config?: components["schemas"]["MultiTurnDriveConfig"] | null;
+        };
+        "MultiTurnSyntheticEvalInputData-Output": {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "multi_turn_synthetic";
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * NewProposedSpecEditApi
          * @description A proposed edit to a spec field.
@@ -9118,6 +10076,19 @@ export interface components {
             error_message?: string | null;
         };
         /**
+         * OverviewApi
+         * @description The neutral summary of the trace the reviewer reads before the claims.
+         *
+         *     Same shape as a claim: prose with inline [n] markers resolved through
+         *     `citations`. Markers restart at [1] here and in every claim.
+         */
+        OverviewApi: {
+            /** Text */
+            text: string;
+            /** Citations */
+            citations: components["schemas"]["CitationApi"][];
+        };
+        /**
          * ParseImportFileApiOutput
          * @description Result of parsing an uploaded bulk-import file of input examples.
          *
@@ -9196,6 +10167,38 @@ export interface components {
              * @enum {string}
              */
             mode: "must_match" | "must_not_match";
+        };
+        /**
+         * PreflightModelApiInput
+         * @description One model lane to verify before a drive commits real spend.
+         *
+         *     The client pings each lane the pipeline will use (target run config,
+         *     synthetic-user driver, judge) with one of these before generate_cases,
+         *     so a dead key/model stops the drive before the plan/SU-gen minutes and
+         *     the batch's model spend, not after.
+         */
+        PreflightModelApiInput: {
+            /**
+             * Model Name
+             * @description The model to verify.
+             */
+            model_name: string;
+            /** @description The provider to verify the model against. */
+            model_provider: components["schemas"]["ModelProviderName"];
+        };
+        /**
+         * PreflightModelApiOutput
+         * @description The lane answered a one-word completion — key, billing, and model
+         *     resolution all work. Failures surface as a 400 with the unwrapped root
+         *     provider error instead.
+         */
+        PreflightModelApiOutput: {
+            /**
+             * Ok
+             * @default true
+             * @constant
+             */
+            ok: true;
         };
         /**
          * Priority
@@ -9931,10 +10934,64 @@ export interface components {
             inaccurate_examples: string;
         };
         /**
+         * RefineJudgeApiInput
+         * @description The current judge prompt plus the human's grades on reviewed traces.
+         *
+         *     `judge_prompt` is the plain-text rubric being refined (the same text the
+         *     review judge ran with). The refined result is a PROPOSAL — the studio
+         *     never auto-applies it.
+         */
+        RefineJudgeApiInput: {
+            /** Judge Prompt */
+            judge_prompt: string;
+            /** Graded Traces */
+            graded_traces: components["schemas"]["GradedTraceApi"][];
+        };
+        /**
+         * RefineJudgeApiOutput
+         * @description The proposed judge-prompt revision + a per-edit rationale.
+         *
+         *     A PROPOSAL: the UI shows the changes for approval and validates the
+         *     prompt before any write; it is never auto-applied.
+         */
+        RefineJudgeApiOutput: {
+            /** Refined Judge Prompt */
+            refined_judge_prompt: string;
+            /** Changes */
+            changes: components["schemas"]["RefineJudgeChangeApi"][];
+            /** Not Incorporated Feedback */
+            not_incorporated_feedback: string | null;
+        };
+        /**
+         * RefineJudgeChangeApi
+         * @description One edit the refine model made to the judge prompt, with its rationale.
+         */
+        RefineJudgeChangeApi: {
+            /** Change */
+            change: string;
+            /** Rationale */
+            rationale: string;
+        };
+        /**
          * RefineSpecApiInput
          * @description Input for refining a spec based on feedback.
          */
         RefineSpecApiInput: {
+            /**
+             * Project Id
+             * @description The project holding the target task. Pair with task_id to have the server attach the task's tools and skills.
+             */
+            project_id?: string | null;
+            /**
+             * Task Id
+             * @description The target task. Pair with project_id to have the server attach the task's tools and skills.
+             */
+            task_id?: string | null;
+            /**
+             * Run Config Id
+             * @description The task run config whose tools and skills to attach — the one this request is about, such as the run config an eval is being written against. Omit to use the task's default run config.
+             */
+            run_config_id?: string | null;
             target_task_info: components["schemas"]["TaskInfoApi"];
             target_specification: components["schemas"]["SpecApi"];
             /** Examples With Feedback */
@@ -9949,6 +11006,8 @@ export interface components {
             new_proposed_spec_edits: components["schemas"]["NewProposedSpecEditApi"][];
             /** Not Incorporated Feedback */
             not_incorporated_feedback: string | null;
+            /** Suggested Name */
+            suggested_name?: string | null;
         };
         /** RemoteServerProperties */
         RemoteServerProperties: {
@@ -10136,6 +11195,26 @@ export interface components {
             models: components["schemas"]["RerankerModelDetails"][];
         };
         /**
+         * ReviewedChainApi
+         * @description A reviewer's verdict on one multi-turn chain, keyed by its leaf run.
+         *
+         *     The leaf TaskRun id is the durable identity that rides from the drive
+         *     batch through review to save — the save path writes the golden rating
+         *     (and the claim review) onto that leaf.
+         */
+        ReviewedChainApi: {
+            /** Leaf Run Id */
+            leaf_run_id: string;
+            /** User Says Meets Spec */
+            user_says_meets_spec: boolean;
+            /**
+             * Feedback
+             * @default
+             */
+            feedback: string;
+            claim_review?: components["schemas"]["ClaimReviewApi"] | null;
+        };
+        /**
          * ReviewedExample
          * @description A reviewed example from the spec review process.
          *
@@ -10153,6 +11232,86 @@ export interface components {
             user_says_meets_spec: boolean;
             /** Feedback */
             feedback: string;
+            /** @description Per-claim grades from the claim review, when the example was reviewed that way (v2 builder). */
+            claim_review?: components["schemas"]["ClaimReviewApi"] | null;
+        };
+        /** RunCasesBatchApiInput */
+        RunCasesBatchApiInput: {
+            /**
+             * Target Run Config
+             * @description Inline run config for the target task, used verbatim — the same full properties shape a manual run sends, tools included. For driving a config that isn't worth saving (ad-hoc experiments, scripting). Must be a Kiln agent config. Exactly one of target_run_config / target_run_config_id is required.
+             */
+            target_run_config?: (components["schemas"]["KilnAgentRunConfigProperties"] | components["schemas"]["McpRunConfigProperties"]) | null;
+            /**
+             * Target Run Config Id
+             * @description ID of one of the target task's saved run configs. The drive uses the saved config verbatim — model, prompt, sampling, and tools — so the agent under test behaves exactly like a manual run, and driven runs attribute back to the config. Exactly one of target_run_config / target_run_config_id is required.
+             */
+            target_run_config_id?: string | null;
+            /**
+             * Cases
+             * @description Cases as returned by /generate_cases, optionally edited. A SyntheticUserCase. Shape: {seed_prompt: str, synthetic_user_info: str, scenario_index?: int | null}. The synthetic_user_info value is an XML-tagged blob: <persona>...</persona><goal>...</goal><behavior_guidance>...</behavior_guidance>. Parsed client-side by kiln_ai.synthetic_user.parser. scenario_index is set only on scenario batches (generate_cases with case_prompts) and maps the case back to its plan prompt.
+             */
+            cases: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Turns
+             * @description Ceiling on the assistant turns produced per case.
+             * @default 5
+             */
+            turns: number;
+            su_driver: components["schemas"]["SyntheticUserDriverSpec"];
+            /**
+             * Batch Tag
+             * @description Optional user-supplied batch label. Constrained to [A-Za-z0-9_-]{1,64} so it can safely be used as a tag on leaf TaskRuns. Auto-generated if not provided.
+             */
+            batch_tag?: string | null;
+        };
+        /**
+         * RunChainEntry
+         * @description A single entry in a multi-turn run's conversation chain.
+         */
+        RunChainEntry: {
+            /**
+             * Run Id
+             * @description The TaskRun id at this turn position in the chain.
+             */
+            run_id: string | null;
+            /**
+             * Turn Index
+             * @description 1-based turn index within the returned chain (turn 1 = first entry, turn N = leaf). For an unbroken chain this is the absolute turn number in the conversation; for a broken chain it is relative to the returned suffix, since absolute positions are unknowable when ancestors are missing.
+             */
+            turn_index: number;
+            /**
+             * Trace Start Index
+             * @description Index into the leaf run's trace where this turn's messages begin. A run's trace is its parent's trace plus its own turn, so this is the parent run's trace length (0 for the conversation root). None when the boundary is unknowable (first entry of a broken chain).
+             */
+            trace_start_index: number | null;
+        };
+        /**
+         * RunChainResponse
+         * @description Ordered conversation chain for a multi-turn TaskRun.
+         *
+         *     The chain is rooted at the conversation start and ends with the requested
+         *     run itself (the requested run is always the final entry, even if it is the
+         *     only entry).
+         */
+        RunChainResponse: {
+            /**
+             * Chain
+             * @description Ordered root-to-leaf, includes the requested run itself as the final entry. If chain_broken is true, the list contains only the intact suffix from the leaf back to (and excluding) the break point.
+             */
+            chain: components["schemas"]["RunChainEntry"][];
+            /**
+             * Chain Broken
+             * @description True if while walking parents we encountered a parent_task_run_id that could not be loaded, a cycle, the depth guard, or a run whose trace does not extend its parent's (so it can't be positioned in the leaf's trace).
+             */
+            chain_broken: boolean;
+            /**
+             * Has Children
+             * @description True if at least one other TaskRun in the task references the requested run via parent_task_run_id (i.e. the requested run is an intermediate node in the chain, not a leaf). Used by the UI to warn that sending a new message from this run will create a new branch rather than extending an existing one.
+             */
+            has_children: boolean;
         };
         /**
          * RunConfigEvalResult
@@ -10276,6 +11435,11 @@ export interface components {
              * @description Tags to apply to the resulting task run.
              */
             tags?: string[] | null;
+            /**
+             * Parent Task Run Id
+             * @description Continue the conversation started by this parent run. Multi-turn tasks only.
+             */
+            parent_task_run_id?: string | null;
             /**
              * Task Run Config Id
              * @description The ID of the saved TaskRunConfig the caller used to populate run_config_properties, if any. Stored on the resulting TaskRun so the run can be traced back to its originating saved config. None for ad-hoc runs that were not initiated from a saved TaskRunConfig.
@@ -10440,6 +11604,36 @@ export interface components {
              */
             mean_score: number | null;
             /**
+             * Min Score
+             * @description The lowest score across all used runs. None when n_used == 0.
+             */
+            min_score?: number | null;
+            /**
+             * P25 Score
+             * @description The 25th-percentile score across all used runs. None when n_used == 0.
+             */
+            p25_score?: number | null;
+            /**
+             * Median Score
+             * @description The median (50th-percentile) score across all used runs. None when n_used == 0.
+             */
+            median_score?: number | null;
+            /**
+             * P75 Score
+             * @description The 75th-percentile score across all used runs. None when n_used == 0.
+             */
+            p75_score?: number | null;
+            /**
+             * P90 Score
+             * @description The 90th-percentile score across all used runs. None when n_used == 0.
+             */
+            p90_score?: number | null;
+            /**
+             * Max Score
+             * @description The highest score across all used runs. None when n_used == 0.
+             */
+            max_score?: number | null;
+            /**
              * N Used
              * @description Number of EvalRuns with all expected scores and not skipped.
              */
@@ -10543,6 +11737,88 @@ export interface components {
              * @enum {string}
              */
             mode: "subset" | "superset" | "equal";
+        };
+        /** SingleTurnEvalInputData */
+        SingleTurnEvalInputData: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "single_turn";
+            user_message: components["schemas"]["UserMessage"];
+        };
+        /**
+         * SingleTurnPipelineRequest
+         * @description The single-turn pipeline's request: the generated inputs to run the
+         *     task on, the target config that runs them (inherited — the two drive
+         *     contracts can't drift), the judge that scores each result, and the
+         *     batch lifecycle fields.
+         *
+         *     `judge.prompt` is also what the client later passes to build_claims as
+         *     the eval_rubric — the claim builder pressure-tests the rubric the
+         *     verdict was really produced under.
+         */
+        SingleTurnPipelineRequest: {
+            /**
+             * Replace Batch Tags
+             * @description Batch tags of previous drives this one supersedes (aborted re-drives can leave several behind). Their runs are deleted once this drive has produced replacements (delete-on-redrive), so abandoned batches don't accumulate on disk — and a wholesale drive failure never destroys the only batch the user has.
+             */
+            replace_batch_tags?: string[];
+            /**
+             * Target Run Config
+             * @description Inline run config for the target task, used verbatim — the same full properties shape a manual run sends, tools included. For driving a config that isn't worth saving (ad-hoc experiments, scripting). Must be a Kiln agent config. Exactly one of target_run_config / target_run_config_id is required.
+             */
+            target_run_config?: (components["schemas"]["KilnAgentRunConfigProperties"] | components["schemas"]["McpRunConfigProperties"]) | null;
+            /**
+             * Target Run Config Id
+             * @description ID of one of the target task's saved run configs. The drive uses the saved config verbatim — model, prompt, sampling, and tools — so the agent under test behaves exactly like a manual run, and driven runs attribute back to the config. Exactly one of target_run_config / target_run_config_id is required.
+             */
+            target_run_config_id?: string | null;
+            /**
+             * Inputs
+             * @description The generated task inputs, one run each — typically one per approved batch-plan prompt. For tasks with an input schema, each entry is the input as a JSON string (the same encoding the saved eval's inputs-only items store). Capped at the multi-turn batch size: the two arms share one batch budget.
+             */
+            inputs: string[];
+            /**
+             * Input Model Name
+             * @description The model that generated the inputs (recorded on each run's input source, like the /generate output writer records it).
+             */
+            input_model_name: string;
+            /** @description The provider the inputs were generated with. */
+            input_provider: components["schemas"]["ModelProviderName"];
+            /**
+             * Batch Tag
+             * @description Optional user-supplied batch label. Constrained to [A-Za-z0-9_-]{1,64} so it can safely be used as a tag on the driven TaskRuns. Auto-generated if not provided.
+             */
+            batch_tag?: string | null;
+            judge: components["schemas"]["JudgeConfig"];
+        };
+        /**
+         * SingleTurnSaveInfo
+         * @description Identifies an existing single-turn pipeline batch to turn into an Eval.
+         *
+         *     The single-turn sibling of MultiTurnSaveInfo: the endpoint splits the
+         *     runs tagged with this batch_tag into golden and train slices (reviewed →
+         *     golden with ratings and claim reviews, unreviewed → train), and mints
+         *     the eval slice as inputs-only EvalInput items from `inputs`. Nothing is
+         *     generated at save time — the dataset is the runs the user just reviewed.
+         */
+        SingleTurnSaveInfo: {
+            /**
+             * Batch Tag
+             * @description The batch_tag emitted by the single-turn pipeline (eval_builder single_turn_pipeline). Identifies the set of batch-tagged TaskRuns already persisted to disk that this Eval's golden/train slices are split from.
+             */
+            batch_tag: string;
+            /**
+             * Reviewed Runs
+             * @description The human's review verdicts, one per reviewed run keyed by TaskRun id (the run itself is the leaf on this arm). Each becomes a golden RequirementRating on the run (plus Feedback / per-claim grades when present).
+             */
+            reviewed_runs?: components["schemas"]["ReviewedChainApi"][];
+            /**
+             * Inputs
+             * @description The generated task inputs the batch actually ran — one EvalInput each, the eval slice the runner executes fresh per run config at eval time. For tasks with an input schema, each entry is the input as a JSON string (the same encoding the pipeline ran).
+             */
+            inputs: string[];
         };
         /**
          * SkillContentResponse
@@ -10764,6 +12040,21 @@ export interface components {
         };
         /** SpecQuestionerApiInput */
         SpecQuestionerApiInput: {
+            /**
+             * Project Id
+             * @description The project holding the target task. Pair with task_id to have the server attach the task's tools and skills.
+             */
+            project_id?: string | null;
+            /**
+             * Task Id
+             * @description The target task. Pair with project_id to have the server attach the task's tools and skills.
+             */
+            task_id?: string | null;
+            /**
+             * Run Config Id
+             * @description The task run config whose tools and skills to attach — the one this request is about, such as the run config an eval is being written against. Omit to use the task's default run config.
+             */
+            run_config_id?: string | null;
             /**
              * target_task_info
              * @description The task info including prompt, input schema, and output schema
@@ -11021,6 +12312,38 @@ export interface components {
             /** Prompt */
             prompt: string;
         };
+        /**
+         * SyntheticUserDriverSpec
+         * @description How to drive the synthetic user. Caller controls because probe
+         *     quality and cost both depend on the model.
+         */
+        SyntheticUserDriverSpec: {
+            /** Model Name */
+            model_name: string;
+            model_provider: components["schemas"]["ModelProviderName"];
+        };
+        /**
+         * SyntheticUserInfo
+         * @description The synthetic user's character sheet: who they are and what they want.
+         *
+         *     This is both the persisted form on multi-turn synthetic eval inputs and
+         *     the runtime shape the synthetic-user driver renders its system prompt
+         *     from. The XML-tagged blob some wire formats carry is parsed into this at
+         *     the wire boundary (kiln_ai.synthetic_user.parser) — it is never stored.
+         *
+         *     extra="allow": unknown fields from newer generators survive load/save
+         *     round-trips instead of being dropped.
+         */
+        SyntheticUserInfo: {
+            /** Persona */
+            persona: string;
+            /** Goal */
+            goal: string;
+            /** Behavior Guidance */
+            behavior_guidance?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** TabooProperties */
         TabooProperties: {
             /**
@@ -11109,6 +12432,11 @@ export interface components {
              * @description ID of the run config to use for this task by default. Must exist in saved run configs for this task.
              */
             default_run_config_id?: string | null;
+            /**
+             * @description Whether this task is single-turn (each run independent) or multi-turn (runs continue prior runs). Immutable after construction: changing it would invalidate existing TaskRuns. To change, clone the task.
+             * @default single_turn
+             */
+            turn_mode: components["schemas"]["TurnMode"];
             /** Model Type */
             readonly model_type: string;
         };
@@ -11132,6 +12460,16 @@ export interface components {
              * @description The task's output JSON schema.
              */
             task_output_schema: string;
+            /**
+             * Task Tools
+             * @description Tools available to the task. Omit if not collected; send [] if the task has none.
+             */
+            task_tools?: components["schemas"]["TaskToolInfoApi"][] | null;
+            /**
+             * Task Skills
+             * @description Skills available to the task. Omit if not collected; send [] if the task has none.
+             */
+            task_skills?: components["schemas"]["TaskSkillInfoApi"][] | null;
         };
         /**
          * TaskMetadataApi
@@ -11472,6 +12810,8 @@ export interface components {
             usage?: components["schemas"]["Usage"] | null;
             /** @description Sum of per-message token usage and cost across the entire trace, including any seeded prior trace. None on records created before this field existed. For a fresh (non-seeded) run, the token / cost fields equal those of `usage`. */
             cumulative_usage?: components["schemas"]["MessageUsage"] | null;
+            /** @description The synthetic-user driver model's spend for an eval-driven conversation, recorded beside the assistant's own usage so `usage` stays assistant-only. None for ordinary runs, and for migrated legacy traces whose driver cost is fused into `usage`. */
+            synthetic_user_usage?: components["schemas"]["Usage"] | null;
             /**
              * Trace
              * @description The trace of the task run in OpenAI format. This is the list of messages that were sent to/from the model.
@@ -11553,6 +12893,8 @@ export interface components {
             usage?: components["schemas"]["Usage"] | null;
             /** @description Sum of per-message token usage and cost across the entire trace, including any seeded prior trace. None on records created before this field existed. For a fresh (non-seeded) run, the token / cost fields equal those of `usage`. */
             cumulative_usage?: components["schemas"]["MessageUsage"] | null;
+            /** @description The synthetic-user driver model's spend for an eval-driven conversation, recorded beside the assistant's own usage so `usage` stays assistant-only. None for ordinary runs, and for migrated legacy traces whose driver cost is fused into `usage`. */
+            synthetic_user_usage?: components["schemas"]["Usage"] | null;
             /**
              * Trace
              * @description The trace of the task run in OpenAI format. This is the list of messages that were sent to/from the model.
@@ -11668,6 +13010,22 @@ export interface components {
              */
             output: string;
         };
+        /**
+         * TaskSkillInfoApi
+         * @description A skill the target task can load. Name and description only.
+         */
+        TaskSkillInfoApi: {
+            /**
+             * Name
+             * @description The skill's name, as the model sees it.
+             */
+            name: string;
+            /**
+             * Description
+             * @description What the skill does. Never the skill's body.
+             */
+            description: string;
+        };
         /** TaskSummariesProject */
         TaskSummariesProject: {
             /** Id */
@@ -11720,6 +13078,22 @@ export interface components {
              * @description Why the task is incompatible, if applicable.
              */
             incompatibility_reason?: string | null;
+        };
+        /**
+         * TaskToolInfoApi
+         * @description A tool the target task can call. Name and description only.
+         */
+        TaskToolInfoApi: {
+            /**
+             * Name
+             * @description The tool's name, as the model sees it.
+             */
+            name: string;
+            /**
+             * Description
+             * @description What the tool does. Never its parameter schema.
+             */
+            description: string;
         };
         /**
          * TestAccessRequest
@@ -12125,6 +13499,12 @@ export interface components {
             arguments: string;
         };
         /**
+         * TurnMode
+         * @description Whether a Task runs as a single turn or as a multiturn conversation.
+         * @enum {string}
+         */
+        TurnMode: "single_turn" | "multiturn";
+        /**
          * UpdateConfigRequest
          * @description Request to partially update a git sync configuration.
          */
@@ -12149,6 +13529,44 @@ export interface components {
              * @description New auth mode, if changing.
              */
             auth_mode?: ("system_keys" | "pat_token" | "github_oauth") | null;
+        };
+        /**
+         * UpdateEvalInputRequest
+         * @description Partial update of an eval input item. Omitted fields are left unchanged.
+         *
+         *     `data` is deliberately absent, and `extra="forbid"` turns an attempt to send it into
+         *     a 422 rather than a silent no-op the caller reads as success. The scenario is the one
+         *     thing that genuinely cannot be edited in place: trace reuse (`TraceIndex`) keys on
+         *     `(source_type, item_id, run_config_id)`, so a later eval would hand a judge a
+         *     conversation generated from the scenario this item *used to* have. Changing a
+         *     scenario means POSTing a new item.
+         *
+         *     `reference` does not have that problem and is editable. It keys nothing: stored
+         *     scores snapshot the `reference_data` the judge actually saw (`_persist_judgment`)
+         *     rather than pointing back at the item, and drive fingerprints hash the scenario, not
+         *     the reference. So correcting ground truth invalidates nothing already on disk — it
+         *     changes what future runs are graded against, which is the whole point of correcting
+         *     it. Iterating on reference data is a normal part of authoring a corpus, and making it
+         *     mint-a-new-item would leave one dead item behind per correction.
+         *
+         *     The cost, stated: scores written either side of a `reference` edit hang off the same
+         *     item id but were graded against different ground truth. Each EvalRun carries the
+         *     reference it saw, so this is auditable, but a rollup that groups scores by item alone
+         *     would mix the two.
+         */
+        UpdateEvalInputRequest: {
+            /**
+             * Tags
+             * @description The item's tags, replacing the whole list. Send [] to clear them. Tags decide which eval_input_filter_id slices the item falls into, so this is how an item is added to or removed from an eval's scope.
+             */
+            tags?: string[] | null;
+            /**
+             * Reference
+             * @description The item's reference data (ground truth), replacing the whole dict. Send null to clear it — omitting the field leaves it unchanged, which is a different request.
+             */
+            reference?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
         };
         /**
          * UpdateEvalRequest
@@ -12304,6 +13722,11 @@ export interface components {
              * @description Total time spent waiting on LLM API calls in milliseconds. Sum of per-call latencies, excludes tool execution time.
              */
             total_llm_latency_ms?: number | null;
+        };
+        /** UserMessage */
+        UserMessage: {
+            /** Text */
+            text: string;
         };
         /**
          * UserModelEntry
@@ -13037,6 +14460,43 @@ export interface operations {
             };
         };
     };
+    available_spec_name_api_projects__project_id__tasks__task_id__available_spec_name_get: {
+        parameters: {
+            query: {
+                /** @description The candidate spec name to check. */
+                name: string;
+            };
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task within the project. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvailableSpecNameResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_specs_api_projects__project_id__tasks__task_id__specs_get: {
         parameters: {
             query?: never;
@@ -13322,6 +14782,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskRun-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_chain_api_projects__project_id__tasks__task_id__runs__run_id__chain_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task within the project. */
+                task_id: string;
+                /** @description The unique identifier of the task run whose chain to return. */
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunChainResponse"];
                 };
             };
             /** @description Validation Error */
@@ -17232,6 +18728,193 @@ export interface operations {
             };
         };
     };
+    get_eval_inputs_api_projects__project_id__tasks__task_id__eval_inputs_get: {
+        parameters: {
+            query?: {
+                /** @description Optional eval-input filter to apply, e.g. 'all' or 'tag::my_tag' (the same IDs evals use as eval_input_filter_id). */
+                filter_id?: string | null;
+            };
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task within the project. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalInputsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_eval_input_api_projects__project_id__tasks__task_id__eval_inputs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task within the project. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEvalInputRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalInput"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_eval_input_api_projects__project_id__tasks__task_id__eval_inputs__eval_input_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task within the project. */
+                task_id: string;
+                /** @description The unique identifier of the eval input. */
+                eval_input_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalInput"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_eval_input_api_projects__project_id__tasks__task_id__eval_inputs__eval_input_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task within the project. */
+                task_id: string;
+                /** @description The unique identifier of the eval input. */
+                eval_input_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_eval_input_api_projects__project_id__tasks__task_id__eval_inputs__eval_input_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task within the project. */
+                task_id: string;
+                /** @description The unique identifier of the eval input. */
+                eval_input_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEvalInputRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalInput"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_eval_configs_api_projects__project_id__tasks__task_id__evals__eval_id__eval_configs_get: {
         parameters: {
             query?: never;
@@ -19741,6 +21424,348 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Spec"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    multi_turn_pipeline_api_projects__project_id__tasks__task_id__eval_builder_multi_turn_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultiTurnPipelineRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    single_turn_pipeline_api_projects__project_id__tasks__task_id__eval_builder_single_turn_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SingleTurnPipelineRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    judge_traces_api_projects__project_id__tasks__task_id__eval_builder_judge_traces_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgeTracesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    build_claims_api_projects__project_id__tasks__task_id__eval_builder_build_claims_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BuildClaimsApiInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildClaimsApiOutput"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preflight_model_api_projects__project_id__tasks__task_id__eval_builder_preflight_model_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreflightModelApiInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreflightModelApiOutput"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    author_judge_api_projects__project_id__tasks__task_id__eval_builder_author_judge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorJudgeApiInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorJudgeApiOutput"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refine_judge_api_projects__project_id__tasks__task_id__eval_builder_refine_judge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unique identifier of the project. */
+                project_id: string;
+                /** @description The unique identifier of the task. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefineJudgeApiInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefineJudgeApiOutput"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_cases_api_projects__project_id__tasks__task_id__multiturn_sdg_generate_cases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID of the project containing the target task. */
+                project_id: string;
+                /** @description ID of the target task. Must be a multi-turn task. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateCasesApiInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateCasesApiOutput"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_run_cases_batch_api_projects__project_id__tasks__task_id__multiturn_sdg_run_cases_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID of the project containing the target task. */
+                project_id: string;
+                /** @description ID of the target task. Must be a multi-turn task. */
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunCasesBatchApiInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

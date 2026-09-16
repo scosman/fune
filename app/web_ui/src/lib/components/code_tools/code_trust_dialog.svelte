@@ -61,7 +61,7 @@
     <div class="mt-3">
       <Warning
         warning_color="error"
-        tight
+        inline={true}
         warning_message={trust_error.getMessage()}
       />
     </div>

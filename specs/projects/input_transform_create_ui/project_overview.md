@@ -1,10 +1,10 @@
 ---
-status: draft
+status: complete
 ---
 
 # Input Transform Create UI
 
-We want to allow creating input transformers from the Kiln UI. (See the `templates` project for backend details about input transformers, and the `input_transform_ui` project for the existing read-only display of transforms — both are already built. This project adds **authoring**, which was explicitly out of scope for `input_transform_ui`.)
+This project added the ability to create input transformers from the Kiln UI. (See the `templates` project for backend details about input transformers, and the `input_transform_ui` project for the existing read-only display of transforms — both are already built. This project adds **authoring**, which was explicitly out of scope for `input_transform_ui`.)
 
 ## Project Details
 

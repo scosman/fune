@@ -124,7 +124,7 @@ def mock_task():
 
 @pytest.fixture
 def mock_intermediate_outputs(mock_task):
-    for run in mock_task.runs():
+    for run in mock_task.runs(include_intermediate_runs=True):
         run.intermediate_outputs = {"reasoning": "thinking output"}
         run.thinking_training_data.return_value = "thinking output"
     mock_task.thinking_instruction = "thinking instructions"
@@ -589,7 +589,7 @@ def test_generate_huggingface_chat_template_toolcall_invalid_json(
 
 def test_build_training_chat(mock_task):
     # Non repaired should use original output
-    mock_task_run = mock_task.runs()[0]
+    mock_task_run = mock_task.runs(include_intermediate_runs=True)[0]
     messages = build_training_chat(
         mock_task_run,
         "system message",
@@ -620,7 +620,7 @@ def test_build_training_chat(mock_task):
 
 def test_build_training_data_with_COT(mock_task):
     # Setup with needed fields for thinking
-    mock_task_run = mock_task.runs()[0]
+    mock_task_run = mock_task.runs(include_intermediate_runs=True)[0]
     assert mock_task_run.parent_task() == mock_task
     mock_task_run.intermediate_outputs = {"chain_of_thought": "cot output"}
     mock_task_run.thinking_training_data.return_value = "cot output"
@@ -667,7 +667,7 @@ def test_build_training_data_with_COT(mock_task):
 
 def test_build_training_data_with_COT_legacy(mock_task):
     # Setup with needed fields for thinking
-    mock_task_run = mock_task.runs()[0]
+    mock_task_run = mock_task.runs(include_intermediate_runs=True)[0]
     assert mock_task_run.parent_task() == mock_task
     mock_task_run.intermediate_outputs = {"chain_of_thought": "cot output"}
     mock_task_run.thinking_training_data.return_value = "cot output"
@@ -715,7 +715,7 @@ def test_build_training_data_with_COT_legacy(mock_task):
 
 def test_build_training_data_with_COT_r1_style(mock_task):
     # Setup with needed fields for thinking
-    mock_task_run = mock_task.runs()[0]
+    mock_task_run = mock_task.runs(include_intermediate_runs=True)[0]
     assert mock_task_run.parent_task() == mock_task
     mock_task_run.intermediate_outputs = {"chain_of_thought": "cot output"}
     mock_task_run.thinking_training_data.return_value = "cot output"
@@ -754,7 +754,7 @@ def test_build_training_data_with_COT_r1_style(mock_task):
 
 def test_build_training_data_with_thinking(mock_task):
     # Setup with needed fields for thinking
-    mock_task_run = mock_task.runs()[0]
+    mock_task_run = mock_task.runs(include_intermediate_runs=True)[0]
     assert mock_task_run.parent_task() == mock_task
     # It should just use the reasoning output if both thinking and chain_of_thought are present
     mock_task_run.intermediate_outputs = {
@@ -807,7 +807,7 @@ def test_build_training_data_with_thinking(mock_task):
 
 def test_build_training_data_with_thinking_r1_style(mock_task):
     # Setup with needed fields for thinking
-    mock_task_run = mock_task.runs()[0]
+    mock_task_run = mock_task.runs(include_intermediate_runs=True)[0]
     assert mock_task_run.parent_task() == mock_task
     # It should just use the reasoning output if both thinking and chain_of_thought are present
     mock_task_run.intermediate_outputs = {
@@ -853,7 +853,7 @@ def test_build_training_data_with_thinking_r1_style(mock_task):
 
 def test_build_training_data_with_repaired_output(mock_task):
     # use repaired output if available
-    mock_task_run = mock_task.runs()[0]
+    mock_task_run = mock_task.runs(include_intermediate_runs=True)[0]
     mock_task_run.repair_instructions = "repair instructions"
     mock_task_run.repaired_output = TaskOutput(
         output='{"test": "repaired output"}',

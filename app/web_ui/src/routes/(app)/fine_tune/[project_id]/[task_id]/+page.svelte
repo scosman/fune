@@ -2,13 +2,18 @@
   import AppPage from "../../../app_page.svelte"
   import EmptyFinetune from "./empty_finetune.svelte"
   import { client } from "$lib/api_client"
-  import type { Finetune } from "$lib/types"
+  import type { Finetune, Task } from "$lib/types"
   import { KilnError, createKilnError } from "$lib/utils/error_handlers"
   import { goto } from "$app/navigation"
   import { page } from "$app/stores"
   import { formatDate } from "$lib/utils/formatters"
-  import { provider_name_from_id, load_available_models } from "$lib/stores"
+  import {
+    provider_name_from_id,
+    load_available_models,
+    load_task,
+  } from "$lib/stores"
   import { data_strategy_name } from "$lib/utils/formatters"
+  import Warning from "$lib/ui/warning.svelte"
 
   import { agentInfo } from "$lib/agent"
   $: project_id = $page.params.project_id!
@@ -18,7 +23,10 @@
     description: `Fine-tuning list for project ID ${project_id}, task ID ${task_id}. Shows all fine-tune jobs and their status.`,
   })
   $: is_empty = !finetunes || finetunes.length == 0
+  $: is_multiturn = task?.turn_mode === "multiturn"
 
+  let task: Task | null = null
+  let task_error: KilnError | null = null
   let finetunes: Finetune[] | null = null
   let finetunes_error: KilnError | null = null
   let finetunes_loading = true
@@ -26,8 +34,34 @@
   $: if (project_id && task_id) {
     finetunes_error = null
     finetunes = null
+    task = null
+    task_error = null
     load_available_models()
+    load_task_for_page(project_id, task_id)
     get_finetunes(project_id, task_id)
+  }
+
+  async function load_task_for_page(
+    req_project_id: string,
+    req_task_id: string,
+  ) {
+    try {
+      const loaded = await load_task(req_project_id, req_task_id)
+      if (req_project_id !== project_id || req_task_id !== task_id) return
+      task = loaded
+    } catch (e) {
+      // Without this the "task === null" spinner would spin forever on a
+      // failed load (e.g. a deleted task or a project you can't access).
+      if (req_project_id !== project_id || req_task_id !== task_id) return
+      if (e instanceof Error && e.message.includes("Load failed")) {
+        task_error = new KilnError(
+          "Could not load task. This task may belong to a project you don't have access to.",
+          null,
+        )
+      } else {
+        task_error = createKilnError(e)
+      }
+    }
   }
 
   async function get_finetunes(req_project_id: string, req_task_id: string) {
@@ -99,7 +133,7 @@
         href: `/optimize/${project_id}/${task_id}`,
       },
     ]}
-    action_buttons={is_empty
+    action_buttons={task === null || is_multiturn || is_empty
       ? []
       : [
           {
@@ -109,9 +143,27 @@
           },
         ]}
   >
-    {#if finetunes_loading}
+    {#if finetunes_loading || (task === null && !task_error)}
       <div class="w-full min-h-[50vh] flex justify-center items-center">
         <div class="loading loading-spinner loading-lg"></div>
+      </div>
+    {:else if finetunes_error || task_error}
+      <div
+        class="w-full min-h-[50vh] flex flex-col justify-center items-center gap-2"
+      >
+        <div class="font-medium">Error Loading Fine Tunes</div>
+        <div class="text-error text-sm">
+          {(finetunes_error || task_error)?.getMessage() ||
+            "An unknown error occurred"}
+        </div>
+      </div>
+    {:else if is_multiturn}
+      <div class="flex flex-col items-center justify-center min-h-[60vh]">
+        <Warning
+          warning_message="Fine-tuning is not supported for multi-turn tasks."
+          warning_color="warning"
+          warning_icon="info"
+        />
       </div>
     {:else if is_empty}
       <div class="flex flex-col items-center justify-center min-h-[60vh]">
@@ -152,15 +204,6 @@
             {/each}
           </tbody>
         </table>
-      </div>
-    {:else if finetunes_error}
-      <div
-        class="w-full min-h-[50vh] flex flex-col justify-center items-center gap-2"
-      >
-        <div class="font-medium">Error Loading Fine Tunes</div>
-        <div class="text-error text-sm">
-          {finetunes_error.getMessage() || "An unknown error occurred"}
-        </div>
       </div>
     {/if}
   </AppPage>

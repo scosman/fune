@@ -14,6 +14,8 @@
   import { get } from "svelte/store"
 
   export let guidance_data: SynthDataGuidanceDataModel
+  const data_guide_store = guidance_data.data_guide
+  const use_data_guide_store = guidance_data.use_data_guide
   // Local instance for dynamic reactive updates
   const selected_template = guidance_data.selected_template
 
@@ -307,7 +309,12 @@
         <!-- No wrapper div: SynthDataGuide renders nothing when there's no
              data guide yet, so an empty wrapper would otherwise leave a stray
              gap-6 gap in this column. -->
-        <SynthDataGuide {guidance_data} />
+        <SynthDataGuide
+          project_id={guidance_data.project_id}
+          task_id={guidance_data.task_id}
+          data_guide={$data_guide_store}
+          bind:use_data_guide={$use_data_guide_store}
+        />
         <RunConfigComponent
           bind:this={run_config_component}
           {project_id}

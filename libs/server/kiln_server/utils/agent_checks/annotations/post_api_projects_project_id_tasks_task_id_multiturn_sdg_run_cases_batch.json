@@ -1,0 +1,9 @@
+{
+  "method": "post",
+  "path": "/api/projects/{project_id}/tasks/{task_id}/multiturn_sdg/run_cases_batch",
+  "agent_policy": {
+    "permission": "allow",
+    "requires_approval": true,
+    "approval_description": "Run a multi-turn synthetic-user batch? Invokes the target model and the SU driver model for several turns per case (cost)."
+  }
+}

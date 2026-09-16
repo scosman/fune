@@ -77,6 +77,19 @@ class TestFormatUserMessage:
             == "Could not connect to the model provider. Check your network connection."
         )
 
+    def test_timeout_error(self):
+        # litellm.Timeout descends from openai's connection error, not
+        # litellm's, so without its own branch it would fall through to the
+        # generic message. Build a real instance so a litellm upgrade that
+        # reshuffles the hierarchy fails here.
+        exc = litellm.Timeout(
+            message="request timed out", model="test-model", llm_provider="openai"
+        )
+        assert (
+            format_error_message(exc)
+            == "The model provider took too long to respond. Try again in a moment."
+        )
+
     @pytest.mark.parametrize(
         "cls",
         [

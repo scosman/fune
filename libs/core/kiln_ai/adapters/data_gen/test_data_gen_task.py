@@ -776,7 +776,7 @@ def test_generate_guidance_refinement_prompt_section_taxonomy_manual_flow():
 
 def test_generate_guidance_refinement_prompt_kiln_pro_is_surgical():
     """Kiln Pro flow (source='kiln_pro'): the metaprompter takes the surgical
-    branch — three Mike sections only, explicit surgical-edit policy, and
+    branch — the three canonical guide sections only, explicit surgical-edit policy, and
     rated samples are NOT rendered (only feedback drives changes)."""
     prompt = generate_guidance_refinement_prompt(
         task_instruction="Translate to French",

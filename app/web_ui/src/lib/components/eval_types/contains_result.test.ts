@@ -28,17 +28,17 @@ describe("ContainsResult", () => {
     expect(container).toBeTruthy()
   })
 
-  it("shows Pass badge when match score is 1.0", () => {
+  it("shows Pass badge when the score is 1.0", () => {
     const { container } = render(ContainsResult, {
-      props: { scores: { match: 1.0 }, eval_config: makeConfig() },
+      props: { scores: { contains_expected: 1.0 }, eval_config: makeConfig() },
     })
     expect(container.textContent).toContain("Pass")
     expect(container.querySelector(".badge-success")).toBeTruthy()
   })
 
-  it("shows Fail badge when match score is 0.0", () => {
+  it("shows Fail badge when the score is 0.0", () => {
     const { container } = render(ContainsResult, {
-      props: { scores: { match: 0.0 }, eval_config: makeConfig() },
+      props: { scores: { contains_expected: 0.0 }, eval_config: makeConfig() },
     })
     expect(container.textContent).toContain("Fail")
     expect(container.querySelector(".badge-error")).toBeTruthy()
@@ -58,7 +58,7 @@ describe("ContainsResult", () => {
   it("shows must_contain mode label", () => {
     const { container } = render(ContainsResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { contains_expected: 1.0 },
         eval_config: makeConfig({ mode: "must_contain" }),
       },
     })
@@ -68,7 +68,7 @@ describe("ContainsResult", () => {
   it("shows must_not_contain mode label", () => {
     const { container } = render(ContainsResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { contains_expected: 1.0 },
         eval_config: makeConfig({ mode: "must_not_contain" }),
       },
     })
@@ -78,7 +78,7 @@ describe("ContainsResult", () => {
   it("shows substring from config", () => {
     const { container } = render(ContainsResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { contains_expected: 1.0 },
         eval_config: makeConfig({ substring: "foo bar" }),
       },
     })
@@ -89,7 +89,7 @@ describe("ContainsResult", () => {
   it("shows reference_key when no substring", () => {
     const { container } = render(ContainsResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { contains_expected: 1.0 },
         eval_config: makeConfig({
           substring: null,
           reference_key: "answer",
@@ -103,7 +103,7 @@ describe("ContainsResult", () => {
   it("shows case insensitive label", () => {
     const { container } = render(ContainsResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { contains_expected: 1.0 },
         eval_config: makeConfig({ case_sensitive: false }),
       },
     })
@@ -113,7 +113,7 @@ describe("ContainsResult", () => {
   it("shows value_expression from config", () => {
     const { container } = render(ContainsResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { contains_expected: 1.0 },
         eval_config: makeConfig({ value_expression: "$.data" }),
       },
     })
@@ -123,17 +123,17 @@ describe("ContainsResult", () => {
 
   it("shows scores via EvalResultScores", () => {
     const { container } = render(ContainsResult, {
-      props: { scores: { match: 1.0 } },
+      props: { scores: { contains_expected: 1.0 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("contains_expected:")
     expect(container.textContent).toContain("1.00")
   })
 
   it("does not show config details when eval_config is null", () => {
     const { container } = render(ContainsResult, {
-      props: { scores: { match: 1.0 } },
+      props: { scores: { contains_expected: 1.0 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("contains_expected:")
     expect(container.textContent).not.toContain("Substring:")
     expect(container.textContent).not.toContain("Mode:")
     expect(container.textContent).not.toContain("Reference key:")

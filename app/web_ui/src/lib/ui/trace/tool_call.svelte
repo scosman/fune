@@ -7,6 +7,9 @@
   export let nameTag: string = "Tool Name"
   export let project_id: string | undefined = undefined
   export let persistent_tool_id: string | undefined = undefined
+  // A citation's span within the arguments, in the coordinates of the raw
+  // argument string. Output translates it onto the printed JSON.
+  export let arguments_mark: { start: number; end: number } | null = null
 
   function get_tool_link(): string | null {
     if (!project_id) return null
@@ -35,5 +38,9 @@
     {/if}
   </div>
   <div class="font-medium text-gray-500">Arguments:</div>
-  <Output raw_output={tool_call.function.arguments} no_padding={true} />
+  <Output
+    raw_output={tool_call.function.arguments}
+    no_padding={true}
+    mark={arguments_mark}
+  />
 </div>

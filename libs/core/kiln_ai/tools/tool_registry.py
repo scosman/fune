@@ -156,8 +156,8 @@ def tool_from_id_and_project(
                 f"Code tool not found: {ct_id} in project {project.id} for tool {tool_id}"
             )
 
-        # Lazy import — PythonCodeTool is phase 2; for now return a
-        # lightweight wrapper that has the tool's identity and definition.
+        # Lazy import — PythonCodeTool pulls in the multiprocessing execution
+        # runtime, which most registry lookups never need.
         from kiln_ai.tools.code_tool import PythonCodeTool
 
         return PythonCodeTool(code_tool, project, task)

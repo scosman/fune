@@ -13,34 +13,26 @@ export function buildCreateEvalBreadcrumbs(
   spec: Spec | null | undefined,
   next_page: string | null,
 ): Breadcrumb[] {
-  // Spec-less evals route with the "legacy" spec_id sentinel — there is no
-  // spec page to link to, so the spec crumb is dropped (matching eval_configs).
-  const crumbs: Breadcrumb[] =
-    spec_id === "legacy"
-      ? [
-          {
-            label: "Evals",
-            href: `/specs/${project_id}/${task_id}`,
-          },
-          {
-            label: "Eval",
-            href: `/specs/${project_id}/${task_id}/${spec_id}/${eval_id}`,
-          },
-        ]
-      : [
-          {
-            label: "Evals",
-            href: `/specs/${project_id}/${task_id}`,
-          },
-          {
-            label: spec?.name || "Eval",
-            href: `/specs/${project_id}/${task_id}/${spec_id}`,
-          },
-          {
-            label: "Eval",
-            href: `/specs/${project_id}/${task_id}/${spec_id}/${eval_id}`,
-          },
-        ]
+  const crumbs: Breadcrumb[] = [
+    {
+      label: "Evals",
+      href: `/specs/${project_id}/${task_id}`,
+    },
+  ]
+
+  // Legacy evals have no backing spec, so there is no spec detail page to
+  // link to — drop that crumb, matching the sibling eval pages.
+  if (spec_id !== "legacy") {
+    crumbs.push({
+      label: spec?.name || "Eval",
+      href: `/specs/${project_id}/${task_id}/${spec_id}`,
+    })
+  }
+
+  crumbs.push({
+    label: "Eval",
+    href: `/specs/${project_id}/${task_id}/${spec_id}/${eval_id}`,
+  })
 
   if (next_page === "eval_configs") {
     crumbs.push({

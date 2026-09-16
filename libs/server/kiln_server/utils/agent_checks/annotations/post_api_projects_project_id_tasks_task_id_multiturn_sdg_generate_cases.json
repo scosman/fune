@@ -1,0 +1,9 @@
+{
+  "method": "post",
+  "path": "/api/projects/{project_id}/tasks/{task_id}/multiturn_sdg/generate_cases",
+  "agent_policy": {
+    "permission": "allow",
+    "requires_approval": true,
+    "approval_description": "Generate synthetic-user cases? Uses an LLM call (cost)."
+  }
+}

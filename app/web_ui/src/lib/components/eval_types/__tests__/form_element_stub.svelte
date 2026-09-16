@@ -46,6 +46,7 @@
   data-inline-action-label={inline_action?.label || ""}
   data-hide-label={hide_label ? "true" : "false"}
   data-placeholder={placeholder || ""}
+  data-error-message={error_message || ""}
   data-empty-label={empty_label || ""}
   data-empty-state-message={empty_state_message || ""}
   data-empty-state-subtitle={empty_state_subtitle || ""}

@@ -1,5 +1,9 @@
+import csv
+import io
+import json
 import logging
 import os
+import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +24,8 @@ from kiln_ai.datamodel import (
     TaskOutputRatingType,
     TaskRun,
 )
+from kiln_ai.datamodel.datamodel_enums import TurnMode
+from kiln_ai.datamodel.model_cache import ModelCache
 from kiln_ai.datamodel.task_run import EvalItemSource
 from kiln_ai.datamodel.tool_id import KilnBuiltInToolId
 from kiln_ai.utils.config import Config
@@ -33,6 +39,17 @@ from kiln_server.run_api import (
     parse_splits,
     run_from_id,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_model_cache_between_tests():
+    """ModelCache is a process-global singleton. Several tests mutate run
+    files on disk after creation; without clearing the cache between tests,
+    a stale cached entry from a prior test could mask filesystem changes and
+    create order-dependence. Clearing pre-test is cheap and removes the
+    risk."""
+    ModelCache.shared().clear()
+    yield
 
 
 @pytest.fixture
@@ -114,6 +131,53 @@ def task_run_setup(tmp_path):
         "run_task_request": run_task_request,
         "task_run": task_run,
     }
+
+
+@pytest.fixture
+def task_run_setup_multiturn(tmp_path):
+    """Same shape as `task_run_setup` but the task is multi-turn so chains
+    via parent_task_run_id are valid. Used by the leaf-only filter tests."""
+    project_path = tmp_path / "test_project" / "project.kiln"
+    project_path.parent.mkdir()
+
+    project = Project(name="Test Project", path=str(project_path))
+    project.save_to_file()
+
+    task = Task(
+        name="Test Task",
+        instruction="This is a test instruction",
+        description="This is a test task",
+        parent=project,
+        turn_mode=TurnMode.multiturn,
+    )
+    task.save_to_file()
+
+    task_run = TaskRun(
+        parent=task,
+        input="Test input",
+        input_source=DataSource(
+            type=DataSourceType.human, properties={"created_by": "Test User"}
+        ),
+        output=TaskOutput(
+            output="Test output",
+            source=DataSource(
+                type=DataSourceType.synthetic,
+                properties={
+                    "model_name": "gpt_4o",
+                    "model_provider": "ollama",
+                    "adapter_name": "kiln_langchain_adapter",
+                    "prompt_id": "simple_prompt_builder",
+                },
+            ),
+        ),
+        trace=[
+            {"role": "user", "content": "Test input"},
+            {"role": "assistant", "content": "Test output"},
+        ],
+    )
+    task_run.save_to_file()
+
+    return {"project": project, "task": task, "task_run": task_run}
 
 
 @pytest.mark.asyncio
@@ -936,8 +1000,8 @@ async def test_delete_run(client, task_run_setup):
     assert path.is_file()
     assert path.parent.exists()
 
-    with patch("kiln_server.run_api.run_from_id") as mock_run_from_id:
-        mock_run_from_id.return_value = task_run
+    with patch("kiln_server.run_api.task_and_run_from_id") as mock_resolve:
+        mock_resolve.return_value = (task, task_run)
         response = client.delete(
             f"/api/projects/{project.id}/tasks/{task.id}/runs/{task_run.id}"
         )
@@ -1086,7 +1150,9 @@ async def test_get_runs_summaries_success(client, task_run_setup):
 
 
 @pytest.mark.asyncio
-async def test_get_runs_summaries_returns_only_leaf_runs(client, task_run_setup):
+async def test_get_runs_summaries_returns_only_leaf_runs(
+    client, task_run_setup_multiturn
+):
     """The endpoint must hide intermediate (non-leaf) runs in multiturn chains.
 
     Setup: starting from the fixture's lone task_run (no parent), build a
@@ -1094,9 +1160,9 @@ async def test_get_runs_summaries_returns_only_leaf_runs(client, task_run_setup)
     Expected: only `leaf` and `sib` come back; task_run and mid are filtered
     out because they are parents of other runs.
     """
-    project = task_run_setup["project"]
-    task = task_run_setup["task"]
-    root = task_run_setup["task_run"]
+    project = task_run_setup_multiturn["project"]
+    task = task_run_setup_multiturn["task"]
+    root = task_run_setup_multiturn["task_run"]
 
     def _make_child(parent_run: TaskRun) -> TaskRun:
         run = TaskRun(
@@ -1180,15 +1246,15 @@ def _make_child_run(task, parent_run: TaskRun, **overrides) -> TaskRun:
 
 
 @pytest.mark.asyncio
-async def test_get_runs_returns_only_leaf_runs(client, task_run_setup):
+async def test_get_runs_returns_only_leaf_runs(client, task_run_setup_multiturn):
     """GET /runs must hide intermediate runs for multiturn chains.
 
     Mirrors test_get_runs_summaries_returns_only_leaf_runs against the
     full-TaskRun endpoint (not the summaries view).
     """
-    project = task_run_setup["project"]
-    task = task_run_setup["task"]
-    root = task_run_setup["task_run"]
+    project = task_run_setup_multiturn["project"]
+    task = task_run_setup_multiturn["task"]
+    root = task_run_setup_multiturn["task_run"]
 
     mid = _make_child_run(task, root)
     leaf = _make_child_run(task, mid)
@@ -1206,7 +1272,7 @@ async def test_get_runs_returns_only_leaf_runs(client, task_run_setup):
 
 
 @pytest.mark.asyncio
-async def test_get_tags_counts_only_leaf_runs(client, task_run_setup):
+async def test_get_tags_counts_only_leaf_runs(client, task_run_setup_multiturn):
     """GET /tags must not count tags attached to intermediate (non-leaf) runs.
 
     Setup: root has tag "intermediate" (will be hidden); mid has tag
@@ -1215,9 +1281,9 @@ async def test_get_tags_counts_only_leaf_runs(client, task_run_setup):
     Expected: only "shared" (count 2) and "leaf_only" (count 1) are returned;
     "intermediate" is absent.
     """
-    project = task_run_setup["project"]
-    task = task_run_setup["task"]
-    root = task_run_setup["task_run"]
+    project = task_run_setup_multiturn["project"]
+    task = task_run_setup_multiturn["task"]
+    root = task_run_setup_multiturn["task_run"]
 
     # Tag the root in-place and re-save so the on-disk file reflects the tag.
     root.tags = ["intermediate"]
@@ -1379,8 +1445,8 @@ class TestEvalTraceProtection:
         task = task_run_setup["task"]
         trace = self._eval_trace(task)
 
-        with patch("kiln_server.run_api.run_from_id") as mock_run_from_id:
-            mock_run_from_id.return_value = trace
+        with patch("kiln_server.run_api.task_and_run_from_id") as mock_resolve:
+            mock_resolve.return_value = (task, trace)
             response = client.delete(
                 f"/api/projects/{project.id}/tasks/{task.id}/runs/{trace.id}"
             )
@@ -1395,8 +1461,8 @@ class TestEvalTraceProtection:
         task_run = task_run_setup["task_run"]
         path = task_run.path
 
-        with patch("kiln_server.run_api.run_from_id") as mock_run_from_id:
-            mock_run_from_id.return_value = task_run
+        with patch("kiln_server.run_api.task_and_run_from_id") as mock_resolve:
+            mock_resolve.return_value = (task, task_run)
             response = client.delete(
                 f"/api/projects/{project.id}/tasks/{task.id}/runs/{task_run.id}"
             )
@@ -2340,3 +2406,1072 @@ async def test_run_task_adapter_sanity_math_tools(
     assert response4.status_code == 200
     res4 = response4.json()
     _assert_math_tools_response(res4, "7")
+
+
+def _make_task_run(
+    task,
+    *,
+    input_text,
+    output_text,
+    parent_task_run_id=None,
+    trace=None,
+):
+    run = TaskRun(
+        parent=task,
+        parent_task_run_id=parent_task_run_id,
+        input=input_text,
+        input_source=DataSource(
+            type=DataSourceType.human, properties={"created_by": "Test User"}
+        ),
+        output=TaskOutput(
+            output=output_text,
+            source=DataSource(
+                type=DataSourceType.synthetic,
+                properties={
+                    "model_name": "gpt_4o",
+                    "model_provider": "ollama",
+                    "adapter_name": "kiln_langchain_adapter",
+                    "prompt_id": "simple_prompt_builder",
+                },
+            ),
+        ),
+        trace=trace,
+    )
+    run.save_to_file()
+    return run
+
+
+@pytest.fixture
+def multiturn_task_run_setup(tmp_path):
+    """Multiturn task with a single saved parent TaskRun whose trace has one user/assistant exchange."""
+    project_path = tmp_path / "test_project" / "project.kiln"
+    project_path.parent.mkdir()
+
+    project = Project(name="Multiturn Project", path=str(project_path))
+    project.save_to_file()
+
+    task = Task(
+        name="Multiturn Task",
+        instruction="Have a conversation",
+        description="Multiturn test task",
+        parent=project,
+        turn_mode="multiturn",
+    )
+    task.save_to_file()
+
+    parent_run = _make_task_run(
+        task,
+        input_text="hi",
+        output_text="hello",
+        trace=[
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ],
+    )
+
+    return {"project": project, "task": task, "parent_run": parent_run}
+
+
+@pytest.mark.asyncio
+async def test_run_task_continuation_multiturn(client, multiturn_task_run_setup):
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    parent_run = multiturn_task_run_setup["parent_run"]
+
+    follow_up_run = _make_task_run(
+        task,
+        input_text="how are you?",
+        output_text="great, thanks!",
+        parent_task_run_id=parent_run.id,
+        trace=[
+            *(parent_run.trace or []),
+            {"role": "user", "content": "how are you?"},
+            {"role": "assistant", "content": "great, thanks!"},
+        ],
+    )
+
+    run_request = {
+        "run_config_properties": {
+            "model_name": "gpt_4o",
+            "model_provider_name": "ollama",
+            "prompt_id": "simple_prompt_builder",
+            "structured_output_mode": "json_schema",
+        },
+        "plaintext_input": "how are you?",
+        "parent_task_run_id": parent_run.id,
+    }
+
+    with (
+        patch("kiln_server.run_api.task_from_id") as mock_task_from_id,
+        patch.object(LiteLlmAdapter, "invoke", new_callable=AsyncMock) as mock_invoke,
+        patch("kiln_ai.utils.config.Config.shared") as MockConfig,
+    ):
+        mock_task_from_id.return_value = task
+        mock_invoke.return_value = follow_up_run
+
+        mock_config_instance = MockConfig.return_value
+        mock_config_instance.ollama_base_url = "http://localhost:11434/v1"
+
+        response = client.post(
+            f"/api/projects/{project.id}/tasks/{task.id}/run", json=run_request
+        )
+
+    assert response.status_code == 200
+
+    # Plumbing check: API forwarded prior_trace and the parent run to the adapter.
+    # (We don't re-assert the response body's trace/parent_task_run_id — those come
+    # from the locally fabricated follow_up_run, not from real adapter behavior.)
+    mock_invoke.assert_awaited_once()
+    invoke_kwargs = mock_invoke.await_args.kwargs
+    assert invoke_kwargs["prior_trace"] == parent_run.trace
+    assert invoke_kwargs["parent_task_run"].id == parent_run.id
+
+
+@pytest.mark.asyncio
+async def test_run_task_continuation_single_turn_rejected(client, task_run_setup):
+    project = task_run_setup["project"]
+    task = task_run_setup["task"]
+    parent_run = task_run_setup["task_run"]
+
+    run_request = {
+        "run_config_properties": {
+            "model_name": "gpt_4o",
+            "model_provider_name": "ollama",
+            "prompt_id": "simple_prompt_builder",
+            "structured_output_mode": "json_schema",
+        },
+        "plaintext_input": "follow up",
+        "parent_task_run_id": parent_run.id,
+    }
+
+    with (
+        patch("kiln_server.run_api.task_from_id") as mock_task_from_id,
+        patch.object(LiteLlmAdapter, "invoke", new_callable=AsyncMock) as mock_invoke,
+    ):
+        mock_task_from_id.return_value = task
+
+        response = client.post(
+            f"/api/projects/{project.id}/tasks/{task.id}/run", json=run_request
+        )
+
+    assert response.status_code == 400
+    assert "multi-turn" in response.json()["message"].lower()
+    assert "parent_task_run_id" in response.json()["message"]
+    mock_invoke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_task_continuation_parent_not_found(client, multiturn_task_run_setup):
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+
+    run_request = {
+        "run_config_properties": {
+            "model_name": "gpt_4o",
+            "model_provider_name": "ollama",
+            "prompt_id": "simple_prompt_builder",
+            "structured_output_mode": "json_schema",
+        },
+        "plaintext_input": "follow up",
+        "parent_task_run_id": "missing_parent_run_id",
+    }
+
+    with (
+        patch("kiln_server.run_api.task_from_id") as mock_task_from_id,
+        patch.object(LiteLlmAdapter, "invoke", new_callable=AsyncMock) as mock_invoke,
+    ):
+        mock_task_from_id.return_value = task
+
+        response = client.post(
+            f"/api/projects/{project.id}/tasks/{task.id}/run", json=run_request
+        )
+
+    assert response.status_code == 404
+    assert "parent run not found" in response.json()["message"].lower()
+    assert "missing_parent_run_id" in response.json()["message"]
+    mock_invoke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_task_continuation_parent_deleted_mid_invoke(
+    client, multiturn_task_run_setup
+):
+    """If the conversation is deleted while the model is generating, the
+    continuation must not resurrect it: the just-saved child is removed from
+    disk and the request fails with a clear conflict error."""
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    parent_run = multiturn_task_run_setup["parent_run"]
+
+    run_request = {
+        "run_config_properties": {
+            "model_name": "gpt_4o",
+            "model_provider_name": "ollama",
+            "prompt_id": "simple_prompt_builder",
+            "structured_output_mode": "json_schema",
+        },
+        "plaintext_input": "how are you?",
+        "parent_task_run_id": parent_run.id,
+    }
+
+    saved_child_ids: list[str] = []
+
+    async def delete_parent_then_return(*args, **kwargs):
+        # Simulate a cascade delete landing mid-generation: the adapter saves
+        # the new child run (as autosave does), but the parent is already gone
+        # by the time invoke returns.
+        follow_up = _make_task_run(
+            task,
+            input_text="how are you?",
+            output_text="great, thanks!",
+            parent_task_run_id=parent_run.id,
+            trace=[
+                *(parent_run.trace or []),
+                {"role": "user", "content": "how are you?"},
+                {"role": "assistant", "content": "great, thanks!"},
+            ],
+        )
+        saved_child_ids.append(str(follow_up.id))
+        parent_run.delete()
+        return follow_up
+
+    with (
+        patch("kiln_server.run_api.task_from_id") as mock_task_from_id,
+        patch.object(LiteLlmAdapter, "invoke", new_callable=AsyncMock) as mock_invoke,
+        patch("kiln_ai.utils.config.Config.shared") as MockConfig,
+    ):
+        mock_task_from_id.return_value = task
+        mock_invoke.side_effect = delete_parent_then_return
+
+        mock_config_instance = MockConfig.return_value
+        mock_config_instance.ollama_base_url = "http://localhost:11434/v1"
+        # The child run is built while Config is mocked; created_by must be a
+        # real string or TaskRun validation rejects it.
+        mock_config_instance.user_id = "test_user"
+
+        response = client.post(
+            f"/api/projects/{project.id}/tasks/{task.id}/run", json=run_request
+        )
+
+    assert response.status_code == 409
+    assert "deleted" in response.json()["message"].lower()
+    # The orphaned child must not remain on disk.
+    assert len(saved_child_ids) == 1
+    ModelCache.shared().clear()
+    assert TaskRun.from_id_and_parent_path(saved_child_ids[0], task.path) is None
+
+
+@pytest.mark.asyncio
+async def test_get_runs_summaries_multiturn_returns_leaf_only(
+    client, multiturn_task_run_setup
+):
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    run_a = multiturn_task_run_setup["parent_run"]
+
+    run_b = _make_task_run(
+        task,
+        input_text="turn 2",
+        output_text="reply 2",
+        parent_task_run_id=run_a.id,
+    )
+    run_c = _make_task_run(
+        task,
+        input_text="turn 3",
+        output_text="reply 3",
+        parent_task_run_id=run_b.id,
+    )
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs_summaries"
+        )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert isinstance(result, list)
+    assert [r["id"] for r in result] == [run_c.id]
+
+
+@pytest.mark.asyncio
+async def test_get_runs_summaries_single_turn_returns_all_runs(client, task_run_setup):
+    project = task_run_setup["project"]
+    task = task_run_setup["task"]
+    first_run = task_run_setup["task_run"]
+
+    second_run = _make_task_run(
+        task, input_text="independent input 2", output_text="independent output 2"
+    )
+    third_run = _make_task_run(
+        task, input_text="independent input 3", output_text="independent output 3"
+    )
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs_summaries"
+        )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert {r["id"] for r in result} == {first_run.id, second_run.id, third_run.id}
+
+
+def _user_turn(text: str) -> dict:
+    return {"role": "user", "content": text}
+
+
+def _assistant_turn(text: str) -> dict:
+    return {"role": "assistant", "content": text}
+
+
+def _build_three_turn_chain(task):
+    """Build root -> mid -> leaf with consistent traces (1, 2, 3 user messages)."""
+    root = _make_task_run(
+        task,
+        input_text="turn 1",
+        output_text="reply 1",
+        trace=[_user_turn("turn 1"), _assistant_turn("reply 1")],
+    )
+    mid = _make_task_run(
+        task,
+        input_text="turn 2",
+        output_text="reply 2",
+        parent_task_run_id=root.id,
+        trace=[
+            _user_turn("turn 1"),
+            _assistant_turn("reply 1"),
+            _user_turn("turn 2"),
+            _assistant_turn("reply 2"),
+        ],
+    )
+    leaf = _make_task_run(
+        task,
+        input_text="turn 3",
+        output_text="reply 3",
+        parent_task_run_id=mid.id,
+        trace=[
+            _user_turn("turn 1"),
+            _assistant_turn("reply 1"),
+            _user_turn("turn 2"),
+            _assistant_turn("reply 2"),
+            _user_turn("turn 3"),
+            _assistant_turn("reply 3"),
+        ],
+    )
+    return root, mid, leaf
+
+
+@pytest.mark.asyncio
+async def test_get_chain_single_turn_task_returns_400(client, task_run_setup):
+    project = task_run_setup["project"]
+    task = task_run_setup["task"]
+    run = task_run_setup["task_run"]
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{run.id}/chain"
+        )
+
+    assert response.status_code == 400
+    assert "multi-turn" in response.json()["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_get_chain_run_not_found_returns_404(client, multiturn_task_run_setup):
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/missing_run/chain"
+        )
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["message"].lower()
+    assert "missing_run" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_get_chain_single_turn_chain_returns_self_only(
+    client, multiturn_task_run_setup
+):
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    parent_run = multiturn_task_run_setup["parent_run"]
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{parent_run.id}/chain"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chain_broken"] is False
+    assert body["chain"] == [
+        {"run_id": parent_run.id, "turn_index": 1, "trace_start_index": 0}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_chain_degenerate_trace_returns_empty_with_chain_broken(
+    client, multiturn_task_run_setup
+):
+    """A leaf whose trace has no user messages is the turn_count == 0 branch:
+    we can't position any run on a turn, so the endpoint surfaces empty
+    chain + chain_broken=True (rather than 500-ing or returning a misaligned
+    list). Without this test the branch is unexercised."""
+    task = multiturn_task_run_setup["task"]
+    project = multiturn_task_run_setup["project"]
+    leaf = _make_task_run(
+        task,
+        input_text="solo",
+        output_text="reply",
+        trace=[
+            {"role": "system", "content": "sys"},
+            {"role": "assistant", "content": "reply"},
+        ],
+    )
+
+    ModelCache.shared().clear()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{leaf.id}/chain"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chain"] == []
+    assert body["chain_broken"] is True
+    assert body["has_children"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_chain_three_turn_chain_returns_full_chain_root_to_leaf(
+    client, multiturn_task_run_setup
+):
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    # The fixture's parent_run is unrelated to the chain we build here.
+    root, mid, leaf = _build_three_turn_chain(task)
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{leaf.id}/chain"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chain_broken"] is False
+    # Each turn starts where its parent's trace ended: root at 0, mid after
+    # root's 2 messages, leaf after mid's 4.
+    assert body["chain"] == [
+        {"run_id": root.id, "turn_index": 1, "trace_start_index": 0},
+        {"run_id": mid.id, "turn_index": 2, "trace_start_index": 2},
+        {"run_id": leaf.id, "turn_index": 3, "trace_start_index": 4},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_chain_missing_parent_mid_chain_sets_chain_broken(
+    client, multiturn_task_run_setup
+):
+    """If a parent run file is deleted from disk, the walk stops there.
+
+    The endpoint returns the intact suffix (leaf only) with chain_broken=true.
+    """
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    _root, mid, leaf = _build_three_turn_chain(task)
+
+    # Delete the mid run's directory from disk. Also evict the cache so the
+    # loader actually re-reads the filesystem.
+    assert mid.path is not None
+    shutil.rmtree(Path(mid.path).parent)
+    ModelCache.shared().clear()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{leaf.id}/chain"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chain_broken"] is True
+    # Only the leaf remains reachable. With its ancestors missing, its absolute
+    # turn number and trace boundary are unknowable: turn_index is relative to
+    # the returned suffix and trace_start_index is None.
+    assert body["chain"] == [
+        {"run_id": leaf.id, "turn_index": 1, "trace_start_index": None}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_chain_cycle_in_chain_is_handled(client, multiturn_task_run_setup):
+    """Two runs whose parent_task_run_id point at each other terminate cleanly."""
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+
+    # Build a normal pair, then mutate the root's parent_task_run_id to point at
+    # the leaf to create a cycle.
+    root = _make_task_run(
+        task,
+        input_text="a",
+        output_text="A",
+        trace=[_user_turn("a"), _assistant_turn("A")],
+    )
+    leaf = _make_task_run(
+        task,
+        input_text="b",
+        output_text="B",
+        parent_task_run_id=root.id,
+        trace=[
+            _user_turn("a"),
+            _assistant_turn("A"),
+            _user_turn("b"),
+            _assistant_turn("B"),
+        ],
+    )
+    root.parent_task_run_id = leaf.id
+    root.save_to_file()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{leaf.id}/chain"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chain_broken"] is True
+    # The walk visits leaf, then root (parent of leaf), then finds root's
+    # parent (leaf) already visited → stops, returning both with broken=true.
+    assert [a["run_id"] for a in body["chain"]] == [root.id, leaf.id]
+    # The suffix root's boundary is unknowable (its recorded parent was not
+    # resolved); the leaf still anchors after root's 2 trace messages.
+    assert [a["trace_start_index"] for a in body["chain"]] == [None, 2]
+
+
+@pytest.mark.asyncio
+async def test_get_chain_run_trace_not_extending_parents_is_broken(
+    client, multiturn_task_run_setup
+):
+    """Pathological: 3-run chain whose leaf trace (2 messages) is shorter than
+    its parent's (4), so the leaf's turn can't be positioned after its
+    ancestors'. Endpoint trims to the suffix (leaf only, boundary unknown) and
+    reports chain_broken=true.
+    """
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+
+    root = _make_task_run(
+        task,
+        input_text="a",
+        output_text="A",
+        trace=[_user_turn("a"), _assistant_turn("A")],
+    )
+    mid = _make_task_run(
+        task,
+        input_text="b",
+        output_text="B",
+        parent_task_run_id=root.id,
+        trace=[
+            _user_turn("a"),
+            _assistant_turn("A"),
+            _user_turn("b"),
+            _assistant_turn("B"),
+        ],
+    )
+    leaf = _make_task_run(
+        task,
+        input_text="c",
+        output_text="C",
+        parent_task_run_id=mid.id,
+        trace=[_user_turn("c"), _assistant_turn("C")],
+    )
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{leaf.id}/chain"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chain_broken"] is True
+    assert body["chain"] == [
+        {"run_id": leaf.id, "turn_index": 1, "trace_start_index": None}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_chain_cot_root_turn_positions_structurally(
+    client, multiturn_task_run_setup
+):
+    """A chain-of-thought root emits TWO user messages for a single turn (the
+    real input plus the final-answer prompt). Turn structure must come from the
+    chain itself, not user-message counting: a 2-run chain with a CoT root is
+    turns 1 and 2, with turn 2 anchored after the root's full 5-message trace.
+    """
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+
+    cot_root_trace = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "turn 1 + thinking instructions"},
+        {"role": "assistant", "content": "thinking..."},
+        {"role": "user", "content": "Considering the above, return a final result."},
+        {"role": "assistant", "content": "reply 1"},
+    ]
+    root = _make_task_run(
+        task,
+        input_text="turn 1",
+        output_text="reply 1",
+        trace=cot_root_trace,
+    )
+    leaf = _make_task_run(
+        task,
+        input_text="turn 2",
+        output_text="reply 2",
+        parent_task_run_id=root.id,
+        trace=[
+            *cot_root_trace,
+            _user_turn("turn 2"),
+            _assistant_turn("reply 2"),
+        ],
+    )
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{leaf.id}/chain"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chain_broken"] is False
+    assert body["chain"] == [
+        {"run_id": root.id, "turn_index": 1, "trace_start_index": 0},
+        {"run_id": leaf.id, "turn_index": 2, "trace_start_index": 5},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_chain_has_children_true_for_intermediate_run(
+    client, multiturn_task_run_setup
+):
+    """An intermediate node (one with at least one child) reports has_children=true."""
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    root, mid, _leaf = _build_three_turn_chain(task)
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        root_response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{root.id}/chain"
+        )
+        mid_response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{mid.id}/chain"
+        )
+
+    assert root_response.status_code == 200
+    assert root_response.json()["has_children"] is True
+    assert mid_response.status_code == 200
+    assert mid_response.json()["has_children"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_chain_has_children_false_for_leaf_run(
+    client, multiturn_task_run_setup
+):
+    """A leaf node (no other run points at it) reports has_children=false."""
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    _root, _mid, leaf = _build_three_turn_chain(task)
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.get(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{leaf.id}/chain"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["has_children"] is False
+
+
+@pytest.mark.asyncio
+async def test_delete_leaf_cascades_full_three_turn_chain(
+    client, multiturn_task_run_setup
+):
+    """Deleting the leaf of a 3-turn linear chain deletes every run in the chain."""
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    root, mid, leaf = _build_three_turn_chain(task)
+
+    # Sanity: all three files exist on disk before we delete.
+    assert root.path.exists()
+    assert mid.path.exists()
+    assert leaf.path.exists()
+
+    ModelCache.shared().clear()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.delete(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{leaf.id}"
+        )
+
+    assert response.status_code == 200
+    assert not root.path.exists()
+    assert not mid.path.exists()
+    assert not leaf.path.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_leaf_stops_at_branching_root(client, multiturn_task_run_setup):
+    """A root with two child branches must survive when one branch's leaf is deleted."""
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+
+    root = _make_task_run(
+        task,
+        input_text="turn 1",
+        output_text="reply 1",
+        trace=[_user_turn("turn 1"), _assistant_turn("reply 1")],
+    )
+    branch_a_leaf = _make_task_run(
+        task,
+        input_text="branch a",
+        output_text="reply a",
+        parent_task_run_id=root.id,
+    )
+    branch_b_leaf = _make_task_run(
+        task,
+        input_text="branch b",
+        output_text="reply b",
+        parent_task_run_id=root.id,
+    )
+
+    ModelCache.shared().clear()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.delete(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{branch_a_leaf.id}"
+        )
+
+    assert response.status_code == 200
+    # Branch A's leaf is gone; the root and branch B's leaf both survive
+    # because the root still has a live child.
+    assert not branch_a_leaf.path.exists()
+    assert root.path.exists()
+    assert branch_b_leaf.path.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_interior_run_cascades_only_upward(
+    client, multiturn_task_run_setup
+):
+    """Deleting a mid-chain run cascades to its ancestors but NOT its descendants."""
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    root, mid, leaf = _build_three_turn_chain(task)
+
+    ModelCache.shared().clear()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.delete(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{mid.id}"
+        )
+
+    assert response.status_code == 200
+    # root had only one child (mid), and that child is now in the delete-set,
+    # so root is removed too. The leaf (a descendant) is NOT touched.
+    assert not root.path.exists()
+    assert not mid.path.exists()
+    assert leaf.path.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_with_cycle_in_parent_chain_stops_cleanly(
+    client, multiturn_task_run_setup
+):
+    """A cycle in parent_task_run_id must not 500 the delete endpoint."""
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+
+    a = _make_task_run(
+        task,
+        input_text="a",
+        output_text="A",
+        trace=[_user_turn("a"), _assistant_turn("A")],
+    )
+    b = _make_task_run(
+        task,
+        input_text="b",
+        output_text="B",
+        parent_task_run_id=a.id,
+    )
+    # Point a.parent_task_run_id at b to create a 2-node cycle.
+    a.parent_task_run_id = b.id
+    a.save_to_file()
+
+    ModelCache.shared().clear()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.delete(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{b.id}"
+        )
+
+    # Should not raise. b deleted; a's only remaining child (b) is deleted, so
+    # a also gets deleted. The cycle check prevents revisiting b.
+    assert response.status_code == 200
+    assert not a.path.exists()
+    assert not b.path.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_with_missing_parent_stops_cascade_cleanly(
+    client, multiturn_task_run_setup
+):
+    """A broken parent reference stops the cascade without 500ing."""
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    _root, mid, leaf = _build_three_turn_chain(task)
+
+    # Remove mid from disk while the leaf still references it.
+    assert mid.path is not None
+    shutil.rmtree(Path(mid.path).parent)
+    ModelCache.shared().clear()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.delete(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{leaf.id}"
+        )
+
+    assert response.status_code == 200
+    # Leaf is gone. Cascade stops at the break — the still-present root is
+    # NOT swept up because we couldn't verify mid (its only child) is dead.
+    assert not leaf.path.exists()
+    assert _root.path.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_single_turn_run_unchanged(client, task_run_setup):
+    """Single-turn runs have no parent chain — behavior is the same as before."""
+    project = task_run_setup["project"]
+    task = task_run_setup["task"]
+    task_run = task_run_setup["task_run"]
+
+    path = task_run.path
+    assert path.exists()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.delete(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/{task_run.id}"
+        )
+
+    assert response.status_code == 200
+    assert not path.exists()
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_leaf_cascades_full_chain(client, multiturn_task_run_setup):
+    """POST /runs/delete with a leaf in a chain must cascade like single DELETE."""
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+    root, mid, leaf = _build_three_turn_chain(task)
+
+    assert root.path.exists()
+    assert mid.path.exists()
+    assert leaf.path.exists()
+
+    ModelCache.shared().clear()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.post(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/delete",
+            json=[str(leaf.id)],
+        )
+
+    assert response.status_code == 200
+    assert not root.path.exists()
+    assert not mid.path.exists()
+    assert not leaf.path.exists()
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_sibling_leaves_cascades_shared_root(
+    client, multiturn_task_run_setup
+):
+    """Bulk-deleting both branches of a forked root sweeps the root up too.
+
+    Single-delete of one branch would stop at the root (because the other
+    branch keeps it alive). Bulk delete with both branches must see them as
+    siblings of each other for the live-children check.
+    """
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+
+    root = _make_task_run(
+        task,
+        input_text="turn 1",
+        output_text="reply 1",
+        trace=[_user_turn("turn 1"), _assistant_turn("reply 1")],
+    )
+    branch_a = _make_task_run(
+        task,
+        input_text="branch a",
+        output_text="reply a",
+        parent_task_run_id=root.id,
+    )
+    branch_b = _make_task_run(
+        task,
+        input_text="branch b",
+        output_text="reply b",
+        parent_task_run_id=root.id,
+    )
+
+    ModelCache.shared().clear()
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.post(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/delete",
+            json=[str(branch_a.id), str(branch_b.id)],
+        )
+
+    assert response.status_code == 200
+    assert not branch_a.path.exists()
+    assert not branch_b.path.exists()
+    assert not root.path.exists()
+
+
+# --------------------------- Bulk upload tests ---------------------------
+
+
+def _build_csv_bytes(rows: list[dict[str, str]]) -> bytes:
+    """Serialize a list of dict rows to CSV bytes with the given header order.
+
+    Used by both single-turn and multiturn upload tests.
+    """
+
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(row)
+    return buffer.getvalue().encode("utf-8")
+
+
+@pytest.mark.asyncio
+async def test_bulk_upload_multiturn_success(client, multiturn_task_run_setup):
+    """Uploading a multiturn CSV materializes one chain per row and reports both counts."""
+
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+
+    csv_bytes = _build_csv_bytes(
+        [
+            {
+                "trace": json.dumps(
+                    [
+                        {"role": "user", "content": "Hi"},
+                        {"role": "assistant", "content": "Hello"},
+                        {"role": "user", "content": "What's 2+2?"},
+                        {"role": "assistant", "content": "4"},
+                    ]
+                ),
+                "tags": "",
+            },
+            {
+                "trace": json.dumps(
+                    [
+                        {"role": "user", "content": "Hi again"},
+                        {"role": "assistant", "content": "Hey!"},
+                    ]
+                ),
+                "tags": "",
+            },
+        ]
+    )
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.post(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/bulk_upload",
+            files={"file": ("convs.csv", csv_bytes, "text/csv")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["filename"] == "convs.csv"
+    # 2 conversations: 2 turns + 1 turn = 3 runs total
+    assert body["imported_count"] == 3
+    assert body["imported_conversation_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_upload_multiturn_invalid_trace_returns_422(
+    client, multiturn_task_run_setup
+):
+    """A row with invalid JSON in `trace` surfaces as a 422 with a row-tagged detail."""
+
+    project = multiturn_task_run_setup["project"]
+    task = multiturn_task_run_setup["task"]
+
+    csv_bytes = _build_csv_bytes(
+        [
+            {"trace": "not json", "tags": ""},
+        ]
+    )
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.post(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/bulk_upload",
+            files={"file": ("bad.csv", csv_bytes, "text/csv")},
+        )
+
+    assert response.status_code == 422
+    detail = response.json()["message"]
+    assert "row 2" in detail
+    assert "trace is not valid JSON" in detail
+
+
+@pytest.mark.asyncio
+async def test_bulk_upload_single_turn_response_has_null_conversation_count(
+    client, task_run_setup
+):
+    """Existing single-turn upload still works and reports null conversation_count."""
+
+    task = task_run_setup["task"]
+    project = task_run_setup["project"]
+
+    csv_bytes = _build_csv_bytes([{"input": "hi", "output": "hello", "tags": ""}])
+
+    with patch("kiln_server.run_api.task_from_id") as mock_task_from_id:
+        mock_task_from_id.return_value = task
+        response = client.post(
+            f"/api/projects/{project.id}/tasks/{task.id}/runs/bulk_upload",
+            files={"file": ("single.csv", csv_bytes, "text/csv")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["imported_count"] == 1
+    assert body["imported_conversation_count"] is None

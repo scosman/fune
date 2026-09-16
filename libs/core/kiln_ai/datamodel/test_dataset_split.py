@@ -455,3 +455,74 @@ def test_compute_tool_info_treats_missing_config_as_empty_tools(mock_run_with_to
     )
     assert tool_info.has_tool_mismatch is True
     assert tool_info.tools is None
+
+
+def _make_task_run(task, *, input_text, output_text, parent_task_run_id=None):
+    run = TaskRun(
+        parent=task,
+        parent_task_run_id=parent_task_run_id,
+        input=input_text,
+        input_source=DataSource(
+            type=DataSourceType.human,
+            properties={"created_by": "test-user"},
+        ),
+        output=TaskOutput(
+            output=output_text,
+            source=DataSource(
+                type=DataSourceType.human,
+                properties={"created_by": "test-user"},
+            ),
+        ),
+    )
+    run.save_to_file()
+    return run
+
+
+def test_build_split_contents_multiturn_excludes_interior_nodes(tmp_path):
+    task_path = tmp_path / "multiturn_task.kiln"
+    task = Task(
+        name="Multiturn Task",
+        path=task_path,
+        description="Multiturn dataset filter test",
+        instruction="Test instruction",
+        turn_mode="multiturn",
+    )
+    task.save_to_file()
+
+    run_a = _make_task_run(task, input_text="turn 1", output_text="reply 1")
+    run_b = _make_task_run(
+        task,
+        input_text="turn 2",
+        output_text="reply 2",
+        parent_task_run_id=run_a.id,
+    )
+    leaf = _make_task_run(
+        task,
+        input_text="turn 3",
+        output_text="reply 3",
+        parent_task_run_id=run_b.id,
+    )
+
+    dataset = DatasetSplit.from_task("Multiturn Split", task, AllSplitDefinition)
+
+    assert dataset.split_contents["all"] == [leaf.id]
+
+
+def test_build_split_contents_single_turn_includes_all_runs(tmp_path):
+    task_path = tmp_path / "single_turn_task.kiln"
+    task = Task(
+        name="Single-turn Task",
+        path=task_path,
+        description="Single-turn dataset filter regression",
+        instruction="Test instruction",
+    )
+    task.save_to_file()
+
+    runs = [
+        _make_task_run(task, input_text=f"input {i}", output_text=f"output {i}")
+        for i in range(3)
+    ]
+
+    dataset = DatasetSplit.from_task("Single-turn Split", task, AllSplitDefinition)
+
+    assert set(dataset.split_contents["all"]) == {run.id for run in runs}

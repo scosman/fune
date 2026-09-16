@@ -40,6 +40,9 @@
 
   // Stores the last-built param values for preview display
   let param_values: Record<string, unknown> = {}
+  // Validation error from building the edit-inputs form. Shown inside the edit
+  // dialog so a bad input keeps the dialog open instead of silently closing.
+  let input_error: KilnError | null = null
 
   function parse_schema(
     schema: { [key: string]: unknown } | undefined,
@@ -71,13 +74,19 @@
   function save_and_close_inputs(): boolean {
     try {
       param_values = build_params()
-    } catch {
-      // Let build_params errors surface at run time
+      input_error = null
+      return true
+    } catch (e) {
+      // A required field is missing or an object param is invalid JSON. Keep
+      // the dialog open and surface the error so the typed inputs aren't
+      // discarded and Run Test can't post stale values.
+      input_error = createKilnError(e)
+      return false
     }
-    return true
   }
 
   function open_edit_inputs() {
+    input_error = null
     edit_inputs_dialog.show()
   }
 
@@ -298,7 +307,7 @@
     <div data-testid="test-error">
       <Warning
         warning_color="error"
-        tight
+        inline={true}
         warning_message={test_error.getMessage()}
       />
     </div>
@@ -327,6 +336,13 @@
           bind:this={input_components[prop.id]}
         />
       {/each}
+      {#if input_error}
+        <Warning
+          warning_color="error"
+          inline={true}
+          warning_message={input_error.getMessage()}
+        />
+      {/if}
     </div>
   {/if}
 </Dialog>

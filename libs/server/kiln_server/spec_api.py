@@ -1,8 +1,8 @@
 import logging
 from typing import Annotated, List
 
-from fastapi import FastAPI, HTTPException, Path
-from kiln_ai.datamodel.basemodel import FilenameString
+from fastapi import FastAPI, HTTPException, Path, Query
+from kiln_ai.datamodel.basemodel import FilenameString, FilenameStringShort
 from kiln_ai.datamodel.datamodel_enums import EvalStatus, Priority
 from kiln_ai.datamodel.eval import Eval
 from kiln_ai.datamodel.spec import Spec, SpecStatus, TaskSample
@@ -15,7 +15,7 @@ from kiln_server.utils.agent_checks.policy import (
     DENY_AGENT,
     agent_policy_require_approval,
 )
-from kiln_server.utils.spec_utils import build_spec_eval
+from kiln_server.utils.spec_utils import build_spec_eval, generate_spec_eval_tags
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,9 @@ def spec_from_id(project_id: str, task_id: str, spec_id: str) -> Spec:
 class SpecCreationRequest(BaseModel):
     """Request to create a new spec."""
 
-    name: FilenameString = Field(description="The name of the spec.")
+    # Short limit: the name becomes the eval's EvalOutputScore.name (max 32)
+    # — a longer name would fail deep inside Eval construction, not here.
+    name: FilenameStringShort = Field(description="The name of the spec.")
     definition: str = Field(
         description="A detailed definition of the spec.", min_length=1
     )
@@ -74,7 +76,89 @@ class SpecCreationRequest(BaseModel):
     )
 
 
+class AvailableSpecNameResponse(BaseModel):
+    """An available spec name resolved from a candidate."""
+
+    name: str = Field(
+        description="The candidate itself when free, else the nearest "
+        "available suffixed variant."
+    )
+    was_taken: bool = Field(
+        description="Whether the candidate collided with an existing spec "
+        "(and `name` is therefore a suffixed variant)."
+    )
+
+
+def resolve_available_spec_name(
+    candidate: FilenameStringShort, existing_names: list[str]
+) -> AvailableSpecNameResponse:
+    """Resolve `candidate` to a spec name that is actually available.
+
+    Collision is judged by the DERIVED EVAL TAGS, not the raw string — two
+    names differing only by case or spacing share a tag namespace (and so
+    each other's datasets), which is the same comparison the save guard
+    enforces. On a collision, suffix ` 2`, ` 3`, … — trimming the base to
+    keep the result inside the short-name limit, and trimming trailing
+    spaces and underscores so the join can't fabricate a forbidden double
+    space or a `_ ` seam.
+
+    Raises HTTPException(409) if no variant is free within the search bound
+    (a task with ~100 same-named specs — pathological; refusing beats
+    looping forever).
+    """
+    taken = {generate_spec_eval_tags(name).test_tag for name in existing_names}
+    if generate_spec_eval_tags(candidate).test_tag not in taken:
+        return AvailableSpecNameResponse(name=candidate, was_taken=False)
+    max_length = 32  # FilenameStringShort's cap; validated on the way in
+    for i in range(2, 100):
+        suffix = f" {i}"
+        base = candidate[: max_length - len(suffix)].rstrip("_ ")
+        variant = f"{base}{suffix}"
+        if generate_spec_eval_tags(variant).test_tag not in taken:
+            return AvailableSpecNameResponse(name=variant, was_taken=True)
+    raise HTTPException(
+        status_code=409,
+        detail=f"No available variant of '{candidate}' was found.",
+    )
+
+
 def connect_spec_api(app: FastAPI):
+    @app.get(
+        "/api/projects/{project_id}/tasks/{task_id}/available_spec_name",
+        summary="Resolve an Available Spec Name",
+        tags=["Specs"],
+        openapi_extra=ALLOW_AGENT,
+    )
+    async def available_spec_name(
+        project_id: Annotated[
+            str, Path(description="The unique identifier of the project.")
+        ],
+        task_id: Annotated[
+            str,
+            Path(description="The unique identifier of the task within the project."),
+        ],
+        name: Annotated[
+            FilenameStringShort,
+            Query(description="The candidate spec name to check."),
+        ],
+    ) -> AvailableSpecNameResponse:
+        """Check a candidate spec name against the task's existing specs and
+        return an available one — the candidate itself, or the nearest
+        suffixed variant on a collision.
+
+        The check uses the derived-tag comparison the spec-save guard
+        enforces (case/spacing-insensitive), so a name this endpoint returns
+        will not 409 at save. Callers prefill suggested names through this
+        (the suggester is deterministic over similar inputs, so second evals
+        on a task collide otherwise) and validate typed names early, where a
+        collision costs nothing instead of surfacing after generation and
+        review.
+        """
+        task = task_from_id(project_id, task_id)
+        return resolve_available_spec_name(
+            name, [spec.name for spec in task.specs(readonly=True)]
+        )
+
     @app.post(
         "/api/projects/{project_id}/tasks/{task_id}/specs",
         summary="Create Spec",

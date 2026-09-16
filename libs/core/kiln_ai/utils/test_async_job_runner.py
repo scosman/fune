@@ -338,35 +338,69 @@ async def test_async_job_runner_observers(concurrency):
             )
 
 
-@pytest.mark.asyncio
-async def test_async_job_runner_retry_delay():
-    jobs = [{"id": 1}]
-    call_count = 0
+def _job_failing_transiently(failures: int) -> AsyncMock:
+    """A job that raises RetryableError `failures` times, then succeeds."""
+    return AsyncMock(side_effect=[RetryableError("transient")] * failures + [True])
 
-    async def run_job_fn(_: dict[str, int]) -> bool:
-        nonlocal call_count
-        call_count += 1
-        if call_count < 3:
-            raise RetryableError("transient")
-        return True
+
+@pytest.mark.asyncio
+async def test_async_job_runner_retry_delay_backoff_windows():
+    """Each retry draws from a window widened by the backoff factor, starting
+    at the configured base delay."""
+    run_job_fn = _job_failing_transiently(2)
+    windows: List[tuple[float, float]] = []
+
+    def pinned_to_top_of_window(low: float, high: float) -> float:
+        windows.append((low, high))
+        return high
 
     runner = AsyncJobRunner(
         concurrency=1,
-        jobs=jobs,
+        jobs=[{"id": 1}],
         run_job_fn=run_job_fn,
         max_retries=2,
-        retry_delay=0.5,
+        retry_delay=1.0,
+        random_uniform=pinned_to_top_of_window,
     )
 
     with patch(
         "kiln_ai.utils.async_job_runner.asyncio.sleep", new_callable=AsyncMock
     ) as mock_sleep:
         updates = [progress async for progress in runner.run()]
-        assert updates[-1].complete == 1
-        assert updates[-1].errors == 0
-        assert call_count == 3
-        assert mock_sleep.await_count == 2
-        mock_sleep.assert_awaited_with(0.5)
+
+    assert updates[-1].complete == 1
+    assert updates[-1].errors == 0
+    assert run_job_fn.await_count == 3
+    assert windows == [(0.0, 1.0), (0.0, 4.0)]
+    assert [call.args[0] for call in mock_sleep.await_args_list] == [1.0, 4.0]
+
+
+@pytest.mark.asyncio
+async def test_async_job_runner_retry_delay_uses_jittered_draw():
+    """The wait is the random draw from inside the window, not the window
+    itself — two draws produce two different waits."""
+    run_job_fn = _job_failing_transiently(2)
+    fractions = iter([0.25, 0.5])
+
+    def fraction_of_window(low: float, high: float) -> float:
+        return low + next(fractions) * (high - low)
+
+    runner = AsyncJobRunner(
+        concurrency=1,
+        jobs=[{"id": 1}],
+        run_job_fn=run_job_fn,
+        max_retries=2,
+        retry_delay=1.0,
+        random_uniform=fraction_of_window,
+    )
+
+    with patch(
+        "kiln_ai.utils.async_job_runner.asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
+        updates = [progress async for progress in runner.run()]
+
+    assert updates[-1].complete == 1
+    assert [call.args[0] for call in mock_sleep.await_args_list] == [0.25, 2.0]
 
 
 @pytest.mark.asyncio
@@ -401,7 +435,8 @@ async def test_async_job_runner_notify_success_outside_retry_loop():
 
 @pytest.mark.asyncio
 async def test_async_job_runner_non_retryable_exception_not_retried():
-    """Non-RetryableError exceptions should fail immediately without retry."""
+    """Non-RetryableError exceptions should fail immediately, without retry or
+    any backoff wait."""
     jobs = [{"id": 1}]
     run_job_fn = AsyncMock(side_effect=RuntimeError("permanent failure"))
 
@@ -413,10 +448,15 @@ async def test_async_job_runner_non_retryable_exception_not_retried():
         retry_delay=0,
     )
 
-    updates = [progress async for progress in runner.run()]
+    with patch(
+        "kiln_ai.utils.async_job_runner.asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
+        updates = [progress async for progress in runner.run()]
+
     assert updates[-1].complete == 0
     assert updates[-1].errors == 1
     assert run_job_fn.await_count == 1
+    mock_sleep.assert_not_awaited()
 
 
 @pytest.mark.asyncio

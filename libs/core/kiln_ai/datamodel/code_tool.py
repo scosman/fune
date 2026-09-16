@@ -1,6 +1,7 @@
 """CodeTool data model — a user-authored Python function stored as a project artifact."""
 
 import ast
+import keyword
 import re
 from typing import Any
 
@@ -136,8 +137,20 @@ class CodeTool(KilnParentedModel):
         return v
 
     @model_validator(mode="after")
-    def validate_parameters_schema(self) -> Self:
+    def validate_parameters_schema(self, info: ValidationInfo) -> Self:
         validate_schema_dict(self.parameters_schema, require_object=True)
+
+        # Parameters are passed to run() as keyword arguments keyed by these names,
+        # and a Python reserved word can never be declared as a run() parameter, so
+        # reject it at authoring. Loaded files are exempt so old projects still open.
+        # Soft keywords (match/case/type/_) are valid identifiers and stay allowed.
+        if not self.loaded_from_file(info):
+            for param_name in self.parameters_schema.get("properties", {}):
+                if keyword.iskeyword(param_name):
+                    raise ValueError(
+                        f"Parameter name '{param_name}' is a reserved Python keyword "
+                        "and cannot be used as a run() parameter. Choose a different name."
+                    )
         return self
 
     @model_validator(mode="after")

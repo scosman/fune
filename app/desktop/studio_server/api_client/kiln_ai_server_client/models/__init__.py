@@ -10,6 +10,9 @@ from .body_start_prompt_optimization_job_v1_jobs_prompt_optimization_job_start_p
     BodyStartPromptOptimizationJobV1JobsPromptOptimizationJobStartPost,
 )
 from .body_start_sample_job_v1_jobs_sample_job_start_post import BodyStartSampleJobV1JobsSampleJobStartPost
+from .build_claim_evidence_input import BuildClaimEvidenceInput
+from .build_claim_evidence_output import BuildClaimEvidenceOutput
+from .change import Change
 from .chat_completion_assistant_message_param_wrapper import ChatCompletionAssistantMessageParamWrapper
 from .chat_completion_content_part_image_param import ChatCompletionContentPartImageParam
 from .chat_completion_content_part_input_audio_param import ChatCompletionContentPartInputAudioParam
@@ -28,6 +31,9 @@ from .check_entitlements_v1_check_entitlements_get_response_check_entitlements_v
     CheckEntitlementsV1CheckEntitlementsGetResponseCheckEntitlementsV1CheckEntitlementsGet,
 )
 from .check_model_supported_response import CheckModelSupportedResponse
+from .citation import Citation
+from .citation_1 import Citation1
+from .claim import Claim
 from .clarify_spec_input import ClarifySpecInput
 from .clarify_spec_output import ClarifySpecOutput
 from .client_chat_message import ClientChatMessage
@@ -64,16 +70,30 @@ from .function_call import FunctionCall
 from .generate_batch_input import GenerateBatchInput
 from .generate_batch_output import GenerateBatchOutput
 from .generate_batch_output_data_by_topic import GenerateBatchOutputDataByTopic
+from .generate_judge_prompt_api_input import GenerateJudgePromptApiInput
+from .generate_judge_prompt_api_input_trace_type import GenerateJudgePromptApiInputTraceType
+from .generate_judge_prompt_output import GenerateJudgePromptOutput
+from .generate_synthetic_users_request import GenerateSyntheticUsersRequest
+from .generate_synthetic_users_response import GenerateSyntheticUsersResponse
+from .generate_v1_synthetic_user_generate_post_response_500 import GenerateV1SyntheticUserGeneratePostResponse500
+from .generate_v1_synthetic_user_generate_post_response_502 import GenerateV1SyntheticUserGeneratePostResponse502
+from .generate_v1_synthetic_user_generate_post_response_502_code import (
+    GenerateV1SyntheticUserGeneratePostResponse502Code,
+)
 from .get_session_v1_chat_sessions_session_id_get_response_400 import GetSessionV1ChatSessionsSessionIdGetResponse400
 from .get_session_v1_chat_sessions_session_id_get_response_404 import GetSessionV1ChatSessionsSessionIdGetResponse404
 from .get_session_v1_chat_sessions_session_id_get_response_426 import GetSessionV1ChatSessionsSessionIdGetResponse426
 from .get_session_v1_chat_sessions_session_id_get_response_500 import GetSessionV1ChatSessionsSessionIdGetResponse500
+from .graded_claim import GradedClaim
+from .graded_trace import GradedTrace
 from .handle_chat_v1_chat_post_response_400 import HandleChatV1ChatPostResponse400
 from .handle_chat_v1_chat_post_response_404 import HandleChatV1ChatPostResponse404
 from .handle_chat_v1_chat_post_response_426 import HandleChatV1ChatPostResponse426
 from .handle_chat_v1_chat_post_response_500 import HandleChatV1ChatPostResponse500
 from .health_health_get_response_health_health_get import HealthHealthGetResponseHealthHealthGet
 from .http_validation_error import HTTPValidationError
+from .human_grade import HumanGrade
+from .human_verdict import HumanVerdict
 from .image_url import ImageURL
 from .image_url_detail import ImageURLDetail
 from .input_audio import InputAudio
@@ -83,6 +103,7 @@ from .job_start_response import JobStartResponse
 from .job_status import JobStatus
 from .job_status_response import JobStatusResponse
 from .job_type import JobType
+from .judge_score import JudgeScore
 from .kiln_agent_run_config_properties import KilnAgentRunConfigProperties
 from .kiln_base_model import KilnBaseModel
 from .list_sessions_v1_chat_sessions_get_response_400 import ListSessionsV1ChatSessionsGetResponse400
@@ -95,19 +116,25 @@ from .mcp_tool_reference_input_schema_type_0 import MCPToolReferenceInputSchemaT
 from .mcp_tool_reference_output_schema_type_0 import MCPToolReferenceOutputSchemaType0
 from .message_usage import MessageUsage
 from .model_provider_name import ModelProviderName
+from .new_proposed_spec_edit import NewProposedSpecEdit
 from .new_proposed_spec_edit_api import NewProposedSpecEditApi
 from .output_file_info import OutputFileInfo
+from .overview import Overview
 from .prompt_optimization_job_output import PromptOptimizationJobOutput
 from .prompt_optimization_job_result_response import PromptOptimizationJobResultResponse
 from .question import Question
 from .question_set import QuestionSet
 from .question_with_answer import QuestionWithAnswer
+from .refine_judge_prompt_input import RefineJudgePromptInput
+from .refine_judge_prompt_output import RefineJudgePromptOutput
 from .refine_spec_api_output import RefineSpecApiOutput
+from .refine_spec_from_answers_and_name_output import RefineSpecFromAnswersAndNameOutput
 from .refine_spec_input import RefineSpecInput
 from .requirement_rating import RequirementRating
 from .sample import Sample
 from .sample_job_output import SampleJobOutput
 from .sample_job_result_response import SampleJobResultResponse
+from .source import Source
 from .spec import Spec
 from .spec_questioner_api_input import SpecQuestionerApiInput
 from .spec_spec_field_current_values import SpecSpecFieldCurrentValues
@@ -121,6 +148,7 @@ from .synthetic_data_generation_session_config import SyntheticDataGenerationSes
 from .synthetic_data_generation_session_config_input import SyntheticDataGenerationSessionConfigInput
 from .synthetic_data_generation_step_config import SyntheticDataGenerationStepConfig
 from .synthetic_data_generation_step_config_input import SyntheticDataGenerationStepConfigInput
+from .synthetic_user_case import SyntheticUserCase
 from .task_info import TaskInfo
 from .task_metadata import TaskMetadata
 from .task_output import TaskOutput
@@ -129,6 +157,8 @@ from .task_output_rating_requirement_ratings import TaskOutputRatingRequirementR
 from .task_output_rating_type import TaskOutputRatingType
 from .task_run import TaskRun
 from .task_run_intermediate_outputs_type_0 import TaskRunIntermediateOutputsType0
+from .task_skill_info import TaskSkillInfo
+from .task_tool_info import TaskToolInfo
 from .tools_run_config import ToolsRunConfig
 from .unauthorized_response import UnauthorizedResponse
 from .usage import Usage
@@ -144,6 +174,9 @@ __all__ = (
     "BatchPlanOutput",
     "BodyStartPromptOptimizationJobV1JobsPromptOptimizationJobStartPost",
     "BodyStartSampleJobV1JobsSampleJobStartPost",
+    "BuildClaimEvidenceInput",
+    "BuildClaimEvidenceOutput",
+    "Change",
     "ChatCompletionAssistantMessageParamWrapper",
     "ChatCompletionContentPartImageParam",
     "ChatCompletionContentPartInputAudioParam",
@@ -160,6 +193,9 @@ __all__ = (
     "ChatSnapshot",
     "CheckEntitlementsV1CheckEntitlementsGetResponseCheckEntitlementsV1CheckEntitlementsGet",
     "CheckModelSupportedResponse",
+    "Citation",
+    "Citation1",
+    "Claim",
     "ClarifySpecInput",
     "ClarifySpecOutput",
     "ClientChatMessage",
@@ -188,16 +224,28 @@ __all__ = (
     "GenerateBatchInput",
     "GenerateBatchOutput",
     "GenerateBatchOutputDataByTopic",
+    "GenerateJudgePromptApiInput",
+    "GenerateJudgePromptApiInputTraceType",
+    "GenerateJudgePromptOutput",
+    "GenerateSyntheticUsersRequest",
+    "GenerateSyntheticUsersResponse",
+    "GenerateV1SyntheticUserGeneratePostResponse500",
+    "GenerateV1SyntheticUserGeneratePostResponse502",
+    "GenerateV1SyntheticUserGeneratePostResponse502Code",
     "GetSessionV1ChatSessionsSessionIdGetResponse400",
     "GetSessionV1ChatSessionsSessionIdGetResponse404",
     "GetSessionV1ChatSessionsSessionIdGetResponse426",
     "GetSessionV1ChatSessionsSessionIdGetResponse500",
+    "GradedClaim",
+    "GradedTrace",
     "HandleChatV1ChatPostResponse400",
     "HandleChatV1ChatPostResponse404",
     "HandleChatV1ChatPostResponse426",
     "HandleChatV1ChatPostResponse500",
     "HealthHealthGetResponseHealthHealthGet",
     "HTTPValidationError",
+    "HumanGrade",
+    "HumanVerdict",
     "ImageURL",
     "ImageURLDetail",
     "InputAudio",
@@ -207,6 +255,7 @@ __all__ = (
     "JobStatus",
     "JobStatusResponse",
     "JobType",
+    "JudgeScore",
     "KilnAgentRunConfigProperties",
     "KilnBaseModel",
     "ListSessionsV1ChatSessionsGetResponse400",
@@ -219,19 +268,25 @@ __all__ = (
     "MCPToolReferenceOutputSchemaType0",
     "MessageUsage",
     "ModelProviderName",
+    "NewProposedSpecEdit",
     "NewProposedSpecEditApi",
     "OutputFileInfo",
+    "Overview",
     "PromptOptimizationJobOutput",
     "PromptOptimizationJobResultResponse",
     "Question",
     "QuestionSet",
     "QuestionWithAnswer",
+    "RefineJudgePromptInput",
+    "RefineJudgePromptOutput",
     "RefineSpecApiOutput",
+    "RefineSpecFromAnswersAndNameOutput",
     "RefineSpecInput",
     "RequirementRating",
     "Sample",
     "SampleJobOutput",
     "SampleJobResultResponse",
+    "Source",
     "Spec",
     "SpecificationInput",
     "SpecificationInputSpecFieldCurrentValues",
@@ -245,6 +300,7 @@ __all__ = (
     "SyntheticDataGenerationSessionConfigInput",
     "SyntheticDataGenerationStepConfig",
     "SyntheticDataGenerationStepConfigInput",
+    "SyntheticUserCase",
     "TaskInfo",
     "TaskMetadata",
     "TaskOutput",
@@ -253,6 +309,8 @@ __all__ = (
     "TaskOutputRatingType",
     "TaskRun",
     "TaskRunIntermediateOutputsType0",
+    "TaskSkillInfo",
+    "TaskToolInfo",
     "ToolsRunConfig",
     "UnauthorizedResponse",
     "Usage",

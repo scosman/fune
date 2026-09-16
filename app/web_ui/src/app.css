@@ -22,6 +22,20 @@ a {
   @apply cursor-pointer;
 }
 
+/* A closed daisyUI modal stays in layout (display kept for its fades).
+   When one is nested inside another modal's box, the box's permanent
+   transform makes the closed overlay position against the box instead of
+   the viewport, inflating the box's scroll area by 1rem — a permanent
+   phantom scrollbar on every dialog whose content carries its own dialogs
+   (e.g. the chat trace's tool and usage viewers). Closed nested modals
+   have no business in layout at all; the cost is their fade-in and
+   fade-out. Assumes [open] is the only open-state signal in this app —
+   a nested modal opened via modal-open/modal-toggle/:target would be
+   hidden outright. */
+.modal-box dialog.modal:not([open]) {
+  display: none;
+}
+
 /* Work around https://github.com/saadeghi/daisyui/issues/2570 */
 .loading-spinner {
   mask-image: url("data:image/svg+xml,%3Csvg width='24' height='24' stroke='black' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cg transform-origin='center'%3E%3Ccircle cx='12' cy='12' r='9.5' fill='none' stroke-width='3' stroke-linecap='round'%3E%3CanimateTransform attributeName='transform' type='rotate' from='0 12 12' to='360 12 12' dur='2s' repeatCount='indefinite'/%3E%3Canimate attributeName='stroke-dasharray' values='0,150;42,150;42,150' keyTimes='0;0.475;1' dur='1.5s' repeatCount='indefinite'/%3E%3Canimate attributeName='stroke-dashoffset' values='0;-16;-59' keyTimes='0;0.475;1' dur='1.5s' repeatCount='indefinite'/%3E%3C/circle%3E%3C/g%3E%3C/svg%3E");

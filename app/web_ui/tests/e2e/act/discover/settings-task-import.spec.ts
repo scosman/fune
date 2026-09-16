@@ -16,14 +16,15 @@ test.describe("Settings - task and import", () => {
   - Page title heading is "New Task"
   - Subtitle includes "A 'task' is a single goal"
   - Form fields: #task_name, #task_instructions, #thinking_instructions
-  - Part headings: "Part 1: Overview", "Part 2: Input Schema", "Part 3: Output Schema"
+  - Part headings: "Part 1: Overview", "Part 2: Task Type", "Part 3: Input Schema", "Part 4: Output Schema"
   - Has "Try an example." link for example task
 
   ## Assertions
   - Heading "New Task" is visible.
   - "Part 1: Overview" text is visible.
-  - "Part 2: Input Schema" text is visible.
-  - "Part 3: Output Schema" text is visible.
+  - "Part 2: Task Type" text is visible.
+  - "Part 3: Input Schema" text is visible.
+  - "Part 4: Output Schema" text is visible.
   - Task name input is empty.
   - "Create Task" submit button is visible.
   - "Try an example." link is visible.
@@ -43,8 +44,9 @@ test.describe("Settings - task and import", () => {
     ).toBeVisible()
 
     await expect(page.getByText("Part 1: Overview")).toBeVisible()
-    await expect(page.getByText("Part 2: Input Schema")).toBeVisible()
-    await expect(page.getByText("Part 3: Output Schema")).toBeVisible()
+    await expect(page.getByText("Part 2: Task Type")).toBeVisible()
+    await expect(page.getByText("Part 3: Input Schema")).toBeVisible()
+    await expect(page.getByText("Part 4: Output Schema")).toBeVisible()
 
     await expect(page.locator("#task_name")).toHaveValue("")
     await expect(

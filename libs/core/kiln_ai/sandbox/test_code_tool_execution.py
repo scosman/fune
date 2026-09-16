@@ -653,6 +653,97 @@ class TestListTools:
         assert tool_list[0]["description"] == "Add two numbers"
 
 
+class TestBrokenAllowlistEntry:
+    """One unresolvable allowlist entry (e.g. a deleted RAG config) must not
+    take down the whole nested-tool surface."""
+
+    BROKEN_ID = "kiln_tool::rag::missing"
+
+    def _patch_registry(self, healthy: FakeTool):
+        def resolver(tool_id, project=None, task=None):
+            if tool_id == self.BROKEN_ID:
+                raise ValueError(f"RAG config not found: {tool_id}")
+            return healthy
+
+        return patch(
+            "kiln_ai.tools.tool_registry.tool_from_id_and_project",
+            side_effect=resolver,
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_tools_shows_healthy_and_unavailable(self, tmp_path):
+        fake = FakeTool("kiln_tool::add_numbers", "fake_add", params=EMPTY_SCHEMA)
+        code = textwrap.dedent("""\
+            import json
+            from kiln import tools
+            def run(x):
+                return json.dumps(tools.list_tools())
+        """)
+        tool = _make_python_code_tool(
+            tmp_path,
+            code,
+            tool_allowlist=["kiln_tool::add_numbers", self.BROKEN_ID],
+        )
+        with self._patch_registry(fake):
+            result = await tool.run(None, x="test")
+        assert not result.is_error
+        tool_list = json.loads(result.output)
+        assert len(tool_list) == 2
+        by_name = {t["name"]: t for t in tool_list}
+        assert by_name["fake_add"]["description"] == "fake"
+        broken = by_name[self.BROKEN_ID]
+        assert broken["description"].startswith("(unavailable:")
+        assert "RAG config not found" in broken["description"]
+
+    @pytest.mark.asyncio
+    async def test_healthy_tool_still_callable(self, tmp_path):
+        fake = FakeTool(
+            "kiln_tool::add_numbers",
+            "fake_add",
+            params=EMPTY_SCHEMA,
+            result=ToolCallResult(output="42"),
+        )
+        code = textwrap.dedent("""\
+            from kiln import tools
+            def run(x):
+                return tools.fake_add()
+        """)
+        tool = _make_python_code_tool(
+            tmp_path,
+            code,
+            tool_allowlist=["kiln_tool::add_numbers", self.BROKEN_ID],
+        )
+        with self._patch_registry(fake):
+            result = await tool.run(None, x="test")
+        assert not result.is_error
+        assert result.output == "42"
+
+    @pytest.mark.asyncio
+    async def test_calling_broken_tool_reports_unavailable(self, tmp_path):
+        fake = FakeTool("kiln_tool::add_numbers", "fake_add", params=EMPTY_SCHEMA)
+        code = textwrap.dedent("""\
+            from kiln.tools import ToolNotAllowed
+            from kiln import tools
+            def run(x):
+                try:
+                    tools.missing_rag()
+                except ToolNotAllowed as e:
+                    return f"unavailable: {e}"
+                return "no error"
+        """)
+        tool = _make_python_code_tool(
+            tmp_path,
+            code,
+            tool_allowlist=["kiln_tool::add_numbers", self.BROKEN_ID],
+        )
+        with self._patch_registry(fake):
+            result = await tool.run(None, x="test")
+        assert not result.is_error
+        assert "unavailable:" in result.output
+        assert "not available" in result.output
+        assert "fake_add" in result.output
+
+
 class TestTimeout:
     @pytest.mark.asyncio
     async def test_timeout_kills_child(self, tmp_path):
@@ -692,6 +783,79 @@ class TestTimeout:
             result = await tool.run(None, x="test")
         assert result.is_error
         assert "timed out" in result.output
+
+
+class TestNestedTimeoutKind:
+    """The dispatcher classifies a nested code tool's timeout from the typed
+    ``timed_out`` flag on its result, never from the error text."""
+
+    def _nested_code_tool(self, project, code: str, timeout_seconds: int = 10):
+        ct = _make_code_tool(
+            code,
+            name="Nested Tool",
+            tool_function_name="nested_tool",
+            parameters_schema=EMPTY_SCHEMA,
+            tool_allowlist=[],
+            timeout_seconds=timeout_seconds,
+        )
+        ct.parent = project
+        return PythonCodeTool(ct, project)
+
+    OUTER_CODE = textwrap.dedent("""\
+        from kiln.tools import ToolCallError, ToolTimeout
+        from kiln import tools
+        def run(x):
+            try:
+                tools.nested_tool()
+            except ToolTimeout:
+                return "timeout"
+            except ToolCallError:
+                return "call_error"
+            return "no error"
+    """)
+
+    @pytest.mark.asyncio
+    async def test_real_nested_timeout_raises_tool_timeout(self, tmp_path):
+        project = _make_project(tmp_path)
+        nested = self._nested_code_tool(
+            project,
+            "import time\ndef run():\n    time.sleep(30)\n",
+            timeout_seconds=1,
+        )
+        outer_ct = _make_code_tool(
+            self.OUTER_CODE, tool_allowlist=["kiln_tool::add_numbers"]
+        )
+        outer_ct.parent = project
+        outer = PythonCodeTool(outer_ct, project)
+        with patch(
+            "kiln_ai.tools.tool_registry.tool_from_id_and_project",
+            return_value=nested,
+        ):
+            result = await outer.run(None, x="test")
+        assert not result.is_error
+        assert result.output == "timeout"
+
+    @pytest.mark.asyncio
+    async def test_failure_text_mentioning_timeout_raises_call_error(self, tmp_path):
+        # An ordinary failure whose message merely contains "timed out" must
+        # not spoof the timeout kind (which callers treat as retryable).
+        project = _make_project(tmp_path)
+        nested = self._nested_code_tool(
+            project,
+            'def run():\n    raise Exception("upstream request timed out after 3 retries")\n',
+        )
+        outer_ct = _make_code_tool(
+            self.OUTER_CODE, tool_allowlist=["kiln_tool::add_numbers"]
+        )
+        outer_ct.parent = project
+        outer = PythonCodeTool(outer_ct, project)
+        with patch(
+            "kiln_ai.tools.tool_registry.tool_from_id_and_project",
+            return_value=nested,
+        ):
+            result = await outer.run(None, x="test")
+        assert not result.is_error
+        assert result.output == "call_error"
 
 
 class TestCrash:

@@ -48,13 +48,17 @@
   export let on_select: (e: Event) => void = () => {}
   export let disabled: boolean = false
   export let info_msg: string | null = null
-  export let height: "base" | "medium" | "large" | "xl" = "base"
+  export let height: "base" | "compact" | "medium" | "large" | "xl" = "base"
   export let empty_label: string = "Select an option"
   export let empty_state_message: string = "No options available"
   export let empty_state_subtitle: string | null = null
   export let empty_state_link: string | null = null
   export let inline_action: InlineAction | null = null
   export let aria_label: string | null = null
+  // The id of an element elsewhere on the page that describes this field — a
+  // live hint or an advisory the control itself does not own. Null for every
+  // caller that has nothing to point at, which leaves the attribute off.
+  export let aria_describedby: string | null = null
   export let hide_label: boolean = false
   export let min: number | null = null
   export let max: number | null = null
@@ -153,6 +157,7 @@
 
   const height_class = {
     base: "h-18",
+    compact: "h-24",
     medium: "h-36",
     large: "h-60",
     xl: "h-96",
@@ -227,6 +232,7 @@
     {#if inputType === "textarea"}
       <textarea
         aria-label={aria_label || label}
+        aria-describedby={aria_describedby}
         placeholder={error_message || placeholder || label}
         {id}
         class="textarea text-base textarea-bordered w-full {height_class[
@@ -241,6 +247,7 @@
     {:else if inputType === "input"}
       <input
         aria-label={aria_label || label}
+        aria-describedby={aria_describedby}
         type="text"
         placeholder={error_message || placeholder || label}
         {id}
@@ -256,6 +263,7 @@
     {:else if inputType === "input_number"}
       <input
         aria-label={aria_label || label}
+        aria-describedby={aria_describedby}
         type="number"
         placeholder={error_message || placeholder || label}
         {id}
@@ -273,6 +281,7 @@
     {:else if inputType === "select"}
       <select
         aria-label={aria_label || label}
+        aria-describedby={aria_describedby}
         {id}
         class="select select-bordered w-full {error_message || inline_error
           ? 'select-error'

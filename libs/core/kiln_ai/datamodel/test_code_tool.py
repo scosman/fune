@@ -126,6 +126,60 @@ class TestSchemaValidation:
         with pytest.raises(ValidationError, match="object with properties"):
             _make_code_tool(parameters_schema={"type": "object"})
 
+    @pytest.mark.parametrize(
+        "param_name",
+        ["from", "class", "return", "lambda", "None", "True", "import"],
+    )
+    def test_reserved_word_param_rejected(self, param_name):
+        schema = {
+            "type": "object",
+            "properties": {param_name: {"type": "string"}},
+        }
+        with pytest.raises(ValidationError, match="reserved Python keyword"):
+            _make_code_tool(parameters_schema=schema)
+
+    @pytest.mark.parametrize("param_name", ["match", "case", "type", "_"])
+    def test_soft_keyword_param_allowed(self, param_name):
+        # Soft keywords are still valid identifiers, so def run(match) works fine.
+        schema = {
+            "type": "object",
+            "properties": {param_name: {"type": "string"}},
+        }
+        ct = _make_code_tool(parameters_schema=schema)
+        assert param_name in ct.parameters_schema["properties"]
+
+    @pytest.mark.parametrize("param_name", ["from_date", "class_name", "query"])
+    def test_normal_param_names_allowed(self, param_name):
+        schema = {
+            "type": "object",
+            "properties": {param_name: {"type": "string"}},
+        }
+        ct = _make_code_tool(parameters_schema=schema)
+        assert param_name in ct.parameters_schema["properties"]
+
+    def test_reserved_word_param_still_loads_from_file(self, tmp_path):
+        # Files saved before the reserved-word check may carry such a parameter;
+        # they must still load, and loaded instances must still accept edits.
+        project = Project(name="test_project", path=tmp_path / "project")
+        project.save_to_file()
+
+        ct = _make_code_tool()
+        ct.parent = project
+        ct.save_to_file()
+
+        assert ct.path is not None
+        data = json.loads(ct.path.read_text())
+        data["parameters_schema"]["properties"] = {"from": {"type": "string"}}
+        ct.path.write_text(json.dumps(data))
+
+        loaded = CodeTool.from_id_and_parent_path(ct.id, project.path)
+        assert loaded is not None
+        assert "from" in loaded.parameters_schema["properties"]
+
+        # Assignment re-runs model validators; archiving a legacy tool must not raise.
+        loaded.is_archived = True
+        loaded.save_to_file()
+
 
 # ---------------------------------------------------------------------------
 # Allowlist validation

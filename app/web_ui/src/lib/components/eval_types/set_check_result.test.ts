@@ -27,17 +27,17 @@ describe("SetCheckResult", () => {
     expect(container).toBeTruthy()
   })
 
-  it("shows Pass badge when match score is 1.0", () => {
+  it("shows Pass badge when the score is 1.0", () => {
     const { container } = render(SetCheckResult, {
-      props: { scores: { match: 1.0 }, eval_config: makeConfig() },
+      props: { scores: { set_matches: 1.0 }, eval_config: makeConfig() },
     })
     expect(container.textContent).toContain("Pass")
     expect(container.querySelector(".badge-success")).toBeTruthy()
   })
 
-  it("shows Fail badge when match score is 0.0", () => {
+  it("shows Fail badge when the score is 0.0", () => {
     const { container } = render(SetCheckResult, {
-      props: { scores: { match: 0.0 }, eval_config: makeConfig() },
+      props: { scores: { set_matches: 0.0 }, eval_config: makeConfig() },
     })
     expect(container.textContent).toContain("Fail")
     expect(container.querySelector(".badge-error")).toBeTruthy()
@@ -57,7 +57,7 @@ describe("SetCheckResult", () => {
   it("shows subset mode label", () => {
     const { container } = render(SetCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { set_matches: 1.0 },
         eval_config: makeConfig({ mode: "subset" }),
       },
     })
@@ -67,7 +67,7 @@ describe("SetCheckResult", () => {
   it("shows superset mode label", () => {
     const { container } = render(SetCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { set_matches: 1.0 },
         eval_config: makeConfig({ mode: "superset" }),
       },
     })
@@ -77,7 +77,7 @@ describe("SetCheckResult", () => {
   it("shows equal mode label", () => {
     const { container } = render(SetCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { set_matches: 1.0 },
         eval_config: makeConfig({ mode: "equal" }),
       },
     })
@@ -87,7 +87,7 @@ describe("SetCheckResult", () => {
   it("shows expected_set from config", () => {
     const { container } = render(SetCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { set_matches: 1.0 },
         eval_config: makeConfig({ expected_set: ["x", "y", "z"] }),
       },
     })
@@ -98,7 +98,7 @@ describe("SetCheckResult", () => {
   it("shows reference_key when no expected_set", () => {
     const { container } = render(SetCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { set_matches: 1.0 },
         eval_config: makeConfig({
           expected_set: null,
           reference_key: "tags",
@@ -112,7 +112,7 @@ describe("SetCheckResult", () => {
   it("shows value_expression from config", () => {
     const { container } = render(SetCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { set_matches: 1.0 },
         eval_config: makeConfig({ value_expression: "$.items" }),
       },
     })
@@ -122,17 +122,17 @@ describe("SetCheckResult", () => {
 
   it("shows scores via EvalResultScores", () => {
     const { container } = render(SetCheckResult, {
-      props: { scores: { match: 0.0 } },
+      props: { scores: { set_matches: 0.0 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("set_matches:")
     expect(container.textContent).toContain("0.00")
   })
 
   it("does not show config details when eval_config is null", () => {
     const { container } = render(SetCheckResult, {
-      props: { scores: { match: 1.0 } },
+      props: { scores: { set_matches: 1.0 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("set_matches:")
     expect(container.textContent).not.toContain("Expected:")
     expect(container.textContent).not.toContain("Reference key:")
     expect(container.textContent).not.toContain("Expression:")

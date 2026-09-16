@@ -38,6 +38,12 @@
   } from "$lib/stores/data_guide_job_store"
   import posthog from "posthog-js"
   import { checkKilnCopilotAvailable } from "$lib/utils/copilot_utils"
+  import {
+    data_guide_return,
+    read_data_guide_caller,
+    stash_data_guide_caller,
+    with_data_guide_caller,
+  } from "$lib/utils/data_guide_return"
   import ExtractionDialog from "$lib/components/extraction_dialog.svelte"
   import type Dialog from "$lib/ui/dialog.svelte"
 
@@ -87,6 +93,11 @@
 
   $: project_id = $page.params.project_id!
   $: task_id = $page.params.task_id!
+  // Which page opened the setup chain (no key means synthetic data
+  // generation): every link out of here forwards it, and the breadcrumb and
+  // the finish action return to it.
+  $: caller = read_data_guide_caller($page.url.searchParams)
+  $: return_target = data_guide_return(caller, project_id, task_id)
   $: agentInfo.set({
     name: "Set Up Data Guide",
     description: `Use Kiln Pro to draft the input data guide for project ${project_id}, task ${task_id} from a list of example inputs.`,
@@ -193,9 +204,13 @@
         return
       }
       if (data) {
-        goto(`/generate/${project_id}/${task_id}/data_guide`, {
-          replaceState: true,
-        })
+        goto(
+          with_data_guide_caller(
+            `/generate/${project_id}/${task_id}/data_guide`,
+            caller,
+          ),
+          { replaceState: true },
+        )
         return
       }
     } catch (e) {
@@ -215,6 +230,9 @@
       pro_available = false
     }
     if (!pro_available) {
+      // The connect route's URL is fixed for OAuth, so the caller rides a
+      // stash across that hop instead of the URL.
+      stash_data_guide_caller(caller)
       goto(`/generate/data_guide_pro_auth`, { replaceState: true })
       return
     }
@@ -280,7 +298,10 @@
     // 2. A job is still running — the spinner page owns that view.
     if (!failed_return && job?.status === "running") {
       goto(
-        `/generate/${project_id}/${task_id}/data_guide_setup_copilot/${job.job_id}`,
+        with_data_guide_caller(
+          `/generate/${project_id}/${task_id}/data_guide_setup_copilot/${job.job_id}`,
+          caller,
+        ),
         { replaceState: true },
       )
       return
@@ -631,6 +652,7 @@
         input_examples,
         run_config_properties: captured_input_run_config,
         created_at: new Date().toISOString(),
+        caller,
       })
       posthog.capture("data_guide_copilot_job_started", {
         entry_count: to_analyze.length,
@@ -642,7 +664,10 @@
       // Awaiting also surfaces a route-chunk load failure as a handled error
       // rather than an unhandled promise rejection.
       await goto(
-        `/generate/${project_id}/${task_id}/data_guide_setup_copilot/${data.job_id}`,
+        with_data_guide_caller(
+          `/generate/${project_id}/${task_id}/data_guide_setup_copilot/${data.job_id}`,
+          caller,
+        ),
       )
     } catch (e) {
       error = createKilnError(e)
@@ -782,8 +807,8 @@
     sub_subtitle_link="https://docs.kiln.tech/docs/synthetic-data-generation"
     breadcrumbs={[
       {
-        label: "Synthetic Data Generation",
-        href: `/generate/${project_id}/${task_id}/synth?session_continued=true`,
+        label: return_target.label,
+        href: return_target.href,
         replace_state: true,
       },
     ]}
@@ -793,8 +818,8 @@
     {#if saved}
       <Completed
         title="Data Guide Saved"
-        subtitle="Your Data Guide is saved. Click Continue to return to Synthetic Data Generation."
-        link={`/generate/${project_id}/${task_id}/synth?session_continued=true`}
+        subtitle={`Your Data Guide is saved. Click Continue to return to ${return_target.label}.`}
+        link={return_target.href}
         button_text="Continue"
       />
     {:else if current_state === "loading"}

@@ -2102,7 +2102,7 @@ class TestPackageProjectForTraining:
         loaded_project = Project.load_from_file(extract_path / "project.kiln")
         loaded_task = loaded_project.tasks()[0]
 
-        task_runs = loaded_task.runs()
+        task_runs = loaded_task.runs(include_intermediate_runs=True)
         assert len(task_runs) == 1
         assert task_runs[0].id == source["task_run"].id
 
@@ -2165,7 +2165,7 @@ class TestPackageProjectForTraining:
         loaded_project = Project.load_from_file(extract_path / "project.kiln")
         loaded_task = loaded_project.tasks()[0]
 
-        task_runs = loaded_task.runs()
+        task_runs = loaded_task.runs(include_intermediate_runs=True)
         assert len(task_runs) == 1
         assert task_runs[0].id == source["task_run"].id
 

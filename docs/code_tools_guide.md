@@ -115,9 +115,9 @@ from kiln.async_tools import ToolNotAllowed, ToolTimeout, ToolCallError
 
 | Exception | When |
 |---|---|
-| `ToolNotAllowed` | The tool name is not in the allowlist. The `.message` lists available tool names. |
+| `ToolNotAllowed` | The tool name is not in the allowlist, or an allowlisted tool can no longer be resolved (e.g. its MCP server was deleted) and so is left out of your tool map. The `.message` lists available tool names. |
 | `ToolTimeout` | A nested tool call timed out. |
-| `ToolCallError` | Everything else: the tool returned an error, arguments failed schema validation, positional arguments were used instead of keyword arguments, or the tool couldn't be resolved. The `.message` includes the expected parameter schema. Has `.tool`, `.message`, and `.raw` (the raw output string when available). |
+| `ToolCallError` | Everything else: the tool returned an error, arguments failed schema validation, or positional arguments were used instead of keyword arguments. The `.message` includes the expected parameter schema. Has `.tool`, `.message`, and `.raw` (the raw output string when available). |
 
 Use these for retry logic:
 

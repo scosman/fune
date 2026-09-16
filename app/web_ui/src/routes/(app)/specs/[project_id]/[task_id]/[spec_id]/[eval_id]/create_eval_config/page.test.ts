@@ -255,8 +255,9 @@ const { CREATE_EVAL_LAYOUT_KEY } = await import("./context")
 
 /**
  * Render the picker page with context provided.
+ * Pass spec_id "legacy" to simulate a legacy eval (no backing spec).
  */
-async function renderPickerPage() {
+async function renderPickerPage(spec_id: string = "spec1") {
   onMountCallbacks.length = 0
 
   // The picker page uses getContext("create_eval_layout"). We need to
@@ -276,11 +277,14 @@ async function renderPickerPage() {
       name: "Test Task",
       instruction: "test instruction",
     }),
-    spec: writable({ id: "spec1", name: "Test Spec" }),
+    // The layout never loads a spec for legacy evals, so the store stays null
+    spec: writable(
+      spec_id === "legacy" ? null : { id: spec_id, name: "Test Spec" },
+    ),
     project_id: writable("proj1"),
     task_id: writable("task1"),
     eval_id: writable("eval1"),
-    spec_id: writable("spec1"),
+    spec_id: writable(spec_id),
   })
 
   const result = render(PickerPage, { context: ctx })
@@ -336,8 +340,12 @@ async function renderBuilder(evalType: string = "code_eval") {
 
 /**
  * Render the builder route page ([eval_config_type]/+page.svelte) with context.
+ * Pass spec_id "legacy" to simulate a legacy eval (no backing spec).
  */
-async function renderBuilderRoutePage(evalConfigType: string) {
+async function renderBuilderRoutePage(
+  evalConfigType: string,
+  spec_id: string = "spec1",
+) {
   onMountCallbacks.length = 0
 
   mockPage.set({
@@ -345,11 +353,11 @@ async function renderBuilderRoutePage(evalConfigType: string) {
       project_id: "proj1",
       task_id: "task1",
       eval_id: "eval1",
-      spec_id: "spec1",
+      spec_id,
       eval_config_type: evalConfigType,
     },
     url: new URL(
-      `http://localhost/specs/proj1/task1/spec1/eval1/create_eval_config/${evalConfigType}`,
+      `http://localhost/specs/proj1/task1/${spec_id}/eval1/create_eval_config/${evalConfigType}`,
     ),
   })
 
@@ -369,11 +377,14 @@ async function renderBuilderRoutePage(evalConfigType: string) {
       input_json_schema: "{}",
       output_json_schema: "{}",
     }),
-    spec: writable({ id: "spec1", name: "Test Spec" }),
+    // The layout never loads a spec for legacy evals, so the store stays null
+    spec: writable(
+      spec_id === "legacy" ? null : { id: spec_id, name: "Test Spec" },
+    ),
     project_id: writable("proj1"),
     task_id: writable("task1"),
     eval_id: writable("eval1"),
-    spec_id: writable("spec1"),
+    spec_id: writable(spec_id),
   })
 
   const result = render(BuilderRoutePage, { context: ctx })
@@ -713,6 +724,50 @@ describe("EvalConfigBuilder", () => {
       expect(mockCreateEvalConfig).toHaveBeenCalledTimes(1)
     })
 
+    it("re-shows the confirm dialog when the config is edited after a passing test", async () => {
+      const { container } = await renderBuilder("exact_match")
+
+      await tick()
+      await new Promise((r) => setTimeout(r, 0))
+      await tick()
+
+      mockTestV2Eval.mockResolvedValueOnce({
+        scores: { accuracy: 1.0 },
+        skipped_reason: null,
+        skipped_detail: null,
+      })
+
+      await fireEvent.click(
+        container.querySelector(
+          '[data-testid="run-test-btn"]',
+        ) as HTMLButtonElement,
+      )
+      await tick()
+      await new Promise((r) => setTimeout(r, 0))
+      await tick()
+
+      // Edit the form after the passing test. The input bubbles to the wrapper's
+      // on_config_edit, which invalidates the just-passed test.
+      const formStub = container.querySelector(
+        '[data-testid="v2-form-stub"]',
+      ) as HTMLElement
+      await fireEvent.input(formStub)
+      await tick()
+
+      resetCalls()
+      await fireEvent.click(
+        container.querySelector(
+          '[data-testid="column-save-button"]',
+        ) as HTMLButtonElement,
+      )
+      await tick()
+      await new Promise((r) => setTimeout(r, 0))
+      await tick()
+
+      expect(showCalls).toContain("Save Without Testing?")
+      expect(mockCreateEvalConfig).not.toHaveBeenCalled()
+    })
+
     it("shows confirm dialog for code_eval after trust is already granted", async () => {
       const { container } = await renderBuilder("code_eval")
 
@@ -783,7 +838,7 @@ describe("builder route page ([eval_config_type])", () => {
   })
 })
 
-describe("EvalConfigBuilder — Phase 3: container shell + intro", () => {
+describe("EvalConfigBuilder — container shell + intro", () => {
   beforeEach(() => {
     resetCalls()
     mockFetchTaskRuns.mockReset()
@@ -920,7 +975,7 @@ describe("EvalConfigBuilder — Phase 3: container shell + intro", () => {
     expect(mockCreateEvalConfig).not.toHaveBeenCalled()
   })
 
-  it("D10: no Save button in the test run pane", async () => {
+  it("has no Save button in the test run pane", async () => {
     const { container } = await renderBuilder("exact_match")
     const pane = container.querySelector("[data-testid='test-run-pane']")
     expect(pane).not.toBeNull()
@@ -949,7 +1004,7 @@ describe("EvalConfigBuilder — Phase 3: container shell + intro", () => {
   })
 })
 
-describe("EvalConfigBuilder — Phase 4: trust modal + bugs", () => {
+describe("EvalConfigBuilder — trust modal + save-flow behavior", () => {
   beforeEach(() => {
     resetCalls()
     mockTestV2Eval.mockReset()
@@ -1377,7 +1432,70 @@ describe("Breadcrumb — Add Judge", () => {
   })
 })
 
-describe("Phase 9 — Docs-link audit + theme-aware colors", () => {
+describe("Breadcrumbs — legacy evals", () => {
+  afterEach(() => {
+    cleanup()
+    mockPage.set({
+      params: {
+        project_id: "proj1",
+        task_id: "task1",
+        eval_id: "eval1",
+        spec_id: "spec1",
+      },
+      url: new URL(
+        "http://localhost/specs/proj1/task1/spec1/eval1/create_eval_config",
+      ),
+    })
+  })
+
+  function getBreadcrumbs(container: HTMLElement): Array<{
+    label: string
+    href: string
+  }> {
+    const appPage = container.querySelector("[data-testid='app-page-stub']")
+    expect(appPage).not.toBeNull()
+    return JSON.parse(appPage!.getAttribute("data-breadcrumbs") || "[]")
+  }
+
+  it("picker page renders the spec crumb for a real spec", async () => {
+    const { container } = await renderPickerPage()
+    const breadcrumbs = getBreadcrumbs(container)
+    expect(breadcrumbs.map((b) => b.label)).toEqual([
+      "Evals",
+      "Test Spec",
+      "Eval",
+    ])
+    expect(breadcrumbs[1].href).toBe("/specs/proj1/task1/spec1")
+  })
+
+  it("picker page drops the spec crumb for legacy evals, keeping the rest", async () => {
+    const { container } = await renderPickerPage("legacy")
+    const breadcrumbs = getBreadcrumbs(container)
+    expect(breadcrumbs.map((b) => b.label)).toEqual(["Evals", "Eval"])
+    expect(breadcrumbs[0].href).toBe("/specs/proj1/task1")
+    expect(breadcrumbs[1].href).toBe("/specs/proj1/task1/legacy/eval1")
+    // No crumb may link to the (nonexistent) legacy spec detail page
+    expect(
+      breadcrumbs.some((b) => b.href === "/specs/proj1/task1/legacy"),
+    ).toBe(false)
+  })
+
+  it("builder route page drops the spec crumb for legacy evals, keeping the rest", async () => {
+    const { container } = await renderBuilderRoutePage("exact_match", "legacy")
+    const breadcrumbs = getBreadcrumbs(container)
+    expect(breadcrumbs.map((b) => b.label)).toEqual([
+      "Evals",
+      "Eval",
+      "Add Judge",
+    ])
+    expect(breadcrumbs[1].href).toBe("/specs/proj1/task1/legacy/eval1")
+    expect(
+      breadcrumbs.some((b) => b.href === "/specs/proj1/task1/legacy"),
+    ).toBe(false)
+  })
+})
+
+describe("EvalConfigBuilder — docs links + theme-aware colors", () => {
   beforeEach(() => {
     resetCalls()
     mockFetchTaskRuns.mockReset()

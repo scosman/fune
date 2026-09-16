@@ -1,0 +1,9 @@
+{
+  "method": "patch",
+  "path": "/api/projects/{project_id}/tasks/{task_id}/eval_inputs/{eval_input_id}",
+  "agent_policy": {
+    "permission": "allow",
+    "requires_approval": true,
+    "approval_description": "Allow agent to edit eval inputs? Tags decide which slice an item falls into, and reference data is the ground truth an item is scored against, so both change what an eval reports. Ensure you backup your project before allowing agentic edits."
+  }
+}

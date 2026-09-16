@@ -463,3 +463,51 @@ class TestToolCallCheckEdgeCases:
         result = await ToolCallCheckEval(cfg).evaluate(_inp(trace=trace))
         assert result.scores == {"score_a": 1.0}
         assert result.skipped_reason is None
+
+    @pytest.mark.asyncio
+    async def test_malformed_tool_call_entries_handled(self):
+        """A null or non-dict "function", or a non-dict tool call, must degrade to
+        an unnamed call rather than raise partway through extraction."""
+        cfg = _make_config(
+            ToolCallCheckProperties(
+                expected_tools=[ToolCallSpec(tool_name="search")],
+            )
+        )
+        trace = [
+            {"role": "user", "content": "msg"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"id": "c1", "function": None},
+                    {"id": "c2", "function": "oops"},
+                    "not_a_dict",
+                    {
+                        "id": "c3",
+                        "type": "function",
+                        "function": {
+                            "name": "search",
+                            "arguments": json.dumps({"q": "cats"}),
+                        },
+                    },
+                ],
+            },
+        ]
+        calls = ToolCallCheckEval._extract_tool_calls(trace)
+        assert [c["name"] for c in calls] == ["", "", "", "search"]
+        assert [c["arguments"] for c in calls] == [{}, {}, {}, {"q": "cats"}]
+
+        # The well-formed call is still found, so the eval scores instead of erroring.
+        result = await ToolCallCheckEval(cfg).evaluate(_inp(trace=trace))
+        assert result.scores == {"score_a": 1.0}
+        assert result.skipped_reason is None
+
+        # Degraded entries are unparseable calls: fail mode counts them as
+        # unexpected tools rather than pretending they were not made.
+        strict_cfg = _make_config(
+            ToolCallCheckProperties(
+                expected_tools=[ToolCallSpec(tool_name="search")],
+                on_unexpected_tools="fail",
+            )
+        )
+        strict = await ToolCallCheckEval(strict_cfg).evaluate(_inp(trace=trace))
+        assert strict.scores == {"score_a": 0.0}

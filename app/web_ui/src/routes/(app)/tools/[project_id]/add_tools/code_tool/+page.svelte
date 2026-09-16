@@ -25,9 +25,9 @@
     generateCodeToolPlaceholder,
     generateImportHelper,
     shouldInsertImport,
-    isCodeUnmodified,
     generateExamples,
     plainTextParamsSchema,
+    resolveStep2Code,
   } from "$lib/utils/code_tool_helpers"
 
   import { agentInfo } from "$lib/agent"
@@ -145,26 +145,21 @@
       parameters_schema,
       tool_description,
     )
-    if (current_step === "define") {
-      // First visit to step 2
-      if (clone_code) {
-        code = clone_code
-        clone_code = null
-      } else {
-        code = new_placeholder
-      }
-      generated_placeholder = new_placeholder
-      schema_changed_hint = false
-    } else {
-      // Returning from step 1 after editing schema
-      if (isCodeUnmodified(code, generated_placeholder)) {
-        code = new_placeholder
-        generated_placeholder = new_placeholder
-        schema_changed_hint = false
-      } else if (new_placeholder !== generated_placeholder) {
-        generated_placeholder = new_placeholder
-        schema_changed_hint = true
-      }
+    // Decide the editor contents from the code state itself, not current_step:
+    // browser Back pops the shallow-routing step, so current_step reads
+    // "define" on a return and would wrongly wipe user code with a placeholder.
+    const resolved = resolveStep2Code({
+      code,
+      newPlaceholder: new_placeholder,
+      generatedPlaceholder: generated_placeholder,
+      schemaChangedHint: schema_changed_hint,
+      cloneCode: clone_code,
+    })
+    code = resolved.code
+    generated_placeholder = resolved.generatedPlaceholder
+    schema_changed_hint = resolved.schemaChangedHint
+    if (resolved.cloneConsumed) {
+      clone_code = null
     }
 
     // Push a shallow-routing history entry so browser Back returns to step 1

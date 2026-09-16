@@ -1,6 +1,6 @@
 # Cross-OS Spawn Sanity Checklist
 
-Code tools and code evals share the same multiprocessing spawn infrastructure (`kiln_ai/sandbox/spawn.py`). This checklist documents what must be verified on each platform before a release that includes code tools.
+Code tools and code evals share the same multiprocessing spawn infrastructure (`kiln_ai/sandbox/spawn.py`). This checklist documents what must be verified on each platform before a release that includes code tools or code evals.
 
 ## Shared infrastructure
 

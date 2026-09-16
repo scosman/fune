@@ -136,6 +136,34 @@
     arg_rows = synced
   }
 
+  function is_valid_json(raw: string): boolean {
+    try {
+      JSON.parse(raw)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // Authoring-time check for one argument row. A value with no name, or a
+  // non-empty value that isn't valid JSON, is an error the author must fix --
+  // rather than being silently dropped or coerced to a raw string at save time.
+  function validate_arg_row(row: ArgRow): {
+    name: string | null
+    value: string | null
+  } {
+    const has_name = row.name.trim().length > 0
+    const has_value = row.value.trim().length > 0
+    return {
+      name: has_value && !has_name ? "Add a name, or clear the value." : null,
+      value:
+        has_value && !is_valid_json(row.value) ? "Must be valid JSON." : null,
+    }
+  }
+
+  // Inline errors, one entry per row, mirroring the arg_rows shape.
+  $: arg_errors = arg_rows.map((rows) => rows.map(validate_arg_row))
+
   function sync_args_to_properties() {
     for (let i = 0; i < properties.expected_tools.length; i++) {
       const rows = arg_rows[i]
@@ -145,15 +173,13 @@
       }
       const args: Record<string, ArgMatch> = {}
       for (const row of rows) {
-        if (!row.name.trim()) continue
-        let parsed: unknown
-        try {
-          parsed = JSON.parse(row.value)
-        } catch {
-          parsed = row.value
-        }
-        args[row.name.trim()] = {
-          value: parsed as ArgMatch["value"],
+        const name = row.name.trim()
+        if (!name) continue
+        // validate() gates save/test, so a non-empty value is guaranteed valid
+        // JSON here; an empty value means "no value constraint" (stored as "").
+        const raw = row.value.trim()
+        args[name] = {
+          value: (raw ? JSON.parse(raw) : "") as ArgMatch["value"],
           match_mode: row.match_mode as ArgMatch["match_mode"],
         }
       }
@@ -174,6 +200,16 @@
     for (let i = 0; i < properties.expected_tools.length; i++) {
       if (!properties.expected_tools[i].tool_name.trim()) {
         return `Expected Tool #${i + 1} is missing a name.`
+      }
+      const rows = arg_rows[i] ?? []
+      for (let j = 0; j < rows.length; j++) {
+        const err = validate_arg_row(rows[j])
+        if (err.name) {
+          return `Expected Tool #${i + 1}, argument #${j + 1}: ${err.name}`
+        }
+        if (err.value) {
+          return `Expected Tool #${i + 1}, argument #${j + 1}: ${err.value}`
+        }
       }
     }
     return null
@@ -250,6 +286,7 @@
                       inputType="input"
                       placeholder="e.g. query"
                       bind:value={arg_row.name}
+                      error_message={arg_errors[item_index]?.[arg_index]?.name}
                     />
                   </div>
                   <div class="flex-1">
@@ -262,6 +299,7 @@
                       inputType="input"
                       placeholder={'"hello", 42, true'}
                       bind:value={arg_row.value}
+                      error_message={arg_errors[item_index]?.[arg_index]?.value}
                     />
                   </div>
                   <div class="w-32">

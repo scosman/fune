@@ -252,6 +252,21 @@
           >, then select the field to compare against.
         </p>
       </CalloutCard>
+    {:else if usage_mode === "optional"}
+      <CalloutCard testid="ref-data-callout">
+        <svelte:fragment slot="icon"><BookIcon /></svelte:fragment>
+        <p class="text-sm text-gray-500">
+          Reference data is the expected values (ground truth) for this test
+          case. It's optional here, but if your <span class="font-medium"
+            >Output to Check</span
+          > expression reads it via Jinja, provide it so the test can run:
+        </p>
+        <p class="mt-1">
+          <code class="font-mono text-xs bg-base-200 px-1.5 py-0.5 rounded"
+            >{"{{ reference_data.expected_type }}"}</code
+          >
+        </p>
+      </CalloutCard>
     {:else if usage_mode === "code"}
       <CalloutCard testid="ref-data-callout">
         <svelte:fragment slot="icon"><BookIcon /></svelte:fragment>

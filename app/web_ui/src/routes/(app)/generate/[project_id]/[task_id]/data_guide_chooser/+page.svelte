@@ -10,9 +10,20 @@
   } from "$lib/components/add_example_dialog.svelte"
   import { pending_data_guide_example } from "../data_guide_setup/pending_example_store"
   import posthog from "posthog-js"
+  import {
+    data_guide_return,
+    read_data_guide_caller,
+    stash_data_guide_caller,
+    with_data_guide_caller,
+  } from "$lib/utils/data_guide_return"
 
   $: project_id = $page.params.project_id!
   $: task_id = $page.params.task_id!
+  // Which page opened the setup chain (no key means synthetic data
+  // generation): every link out of here forwards it, and the breadcrumb and
+  // the finish action return to it.
+  $: caller = read_data_guide_caller($page.url.searchParams)
+  $: return_target = data_guide_return(caller, project_id, task_id)
   $: agentInfo.set({
     name: "Choose Data Guide Workflow",
     description: `Choose between manual and Kiln Pro Data Guide creation for project ${project_id}, task ${task_id}.`,
@@ -24,7 +35,10 @@
     const job = getDataGuideJob(project_id, task_id)
     if (job) {
       goto(
-        `/generate/${project_id}/${task_id}/data_guide_setup_copilot/${job.job_id}`,
+        with_data_guide_caller(
+          `/generate/${project_id}/${task_id}/data_guide_setup_copilot/${job.job_id}`,
+          caller,
+        ),
         { replaceState: true },
       )
     }
@@ -49,7 +63,12 @@
     }>,
   ) {
     pending_data_guide_example.set(event.detail.sample)
-    goto(`/generate/${project_id}/${task_id}/data_guide_setup`)
+    goto(
+      with_data_guide_caller(
+        `/generate/${project_id}/${task_id}/data_guide_setup`,
+        caller,
+      ),
+    )
   }
 
   function pick_kiln_pro() {
@@ -57,12 +76,17 @@
     const job = getDataGuideJob(project_id, task_id)
     if (job) {
       goto(
-        `/generate/${project_id}/${task_id}/data_guide_setup_copilot/${job.job_id}`,
+        with_data_guide_caller(
+          `/generate/${project_id}/${task_id}/data_guide_setup_copilot/${job.job_id}`,
+          caller,
+        ),
       )
       return
     }
     // Static auth route: it forwards to the setup page once connected (and
-    // straight through if the user already is).
+    // straight through if the user already is). Its URL is fixed for OAuth,
+    // so the caller rides a stash across that hop instead of the URL.
+    stash_data_guide_caller(caller)
     goto(`/generate/data_guide_pro_auth`, { replaceState: true })
   }
 </script>
@@ -75,8 +99,8 @@
     sub_subtitle_link="https://docs.kiln.tech/docs/synthetic-data-generation"
     breadcrumbs={[
       {
-        label: "Synthetic Data Generation",
-        href: `/generate/${project_id}/${task_id}/synth?session_continued=true`,
+        label: return_target.label,
+        href: return_target.href,
         replace_state: true,
       },
     ]}

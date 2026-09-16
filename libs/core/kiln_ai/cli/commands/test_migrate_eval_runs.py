@@ -642,22 +642,38 @@ def test_record_naming_a_deleted_run_config_is_left_alone(fixture, tmp_path):
 
 
 def test_calibration_without_a_dataset_item_is_left_alone(fixture):
-    record = save_eval_run(
-        fixture.v2_config,
-        task_run_config_id=None,
-        eval_input_id=fixture.eval_input.id,
-        eval_config_eval=True,
-        scores={"accuracy": 1.0},
-        input="the question",
-        output="the golden answer",
-    )
+    """A calibration record naming an eval input instead of a dataset item.
 
-    change = next(
-        c for c in plan_project(fixture.project).changes if c.eval_run.id == record.id
+    The datamodel refuses to construct or load this shape (calibration requires
+    dataset_id), so on disk it can only exist as a file this build can't read:
+    it lands in load_errors, is stepped over, and its bytes are never touched.
+    """
+    runs_dir = fixture.v2_config.path.parent / "runs" / "999999999999"
+    runs_dir.mkdir(parents=True)
+    record_path = runs_dir / "eval_run.kiln"
+    record_path.write_text(
+        json.dumps(
+            {
+                "v": 1,
+                "id": "999999999999",
+                "model_type": "eval_run",
+                "task_run_config_id": None,
+                "eval_input_id": fixture.eval_input.id,
+                "eval_config_eval": True,
+                "scores": {"accuracy": 1.0},
+                "input": "the question",
+                "output": "the golden answer",
+            }
+        )
     )
-    assert change.action == MigrationAction.unmigratable
-    assert "no dataset_id" in change.detail
-    assert change.migrated is None
+    before = record_path.read_bytes()
+
+    plan = plan_project(fixture.project)
+
+    assert record_path in [error.path for error in plan.load_errors]
+    assert all(c.eval_run.id != "999999999999" for c in plan.changes)
+    assert apply_plan(plan) == []
+    assert record_path.read_bytes() == before
 
 
 def test_calibration_whose_golden_item_was_deleted_is_left_alone(fixture, tmp_path):

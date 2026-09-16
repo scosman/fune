@@ -97,6 +97,11 @@
         }, 0)
       }, 0)
     }
+
+    // Fire a bubbling change like a native <select> would, so ancestor
+    // on:change handlers (e.g. unsaved-changes tracking) react to picks made
+    // through this custom dropdown, which produces no native change event.
+    selectedElement?.dispatchEvent(new Event("change", { bubbles: true }))
   }
 
   // Make it reactive, when selected changes, update the selected_values

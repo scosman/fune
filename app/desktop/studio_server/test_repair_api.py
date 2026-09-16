@@ -184,7 +184,7 @@ def test_save_repair_success(
     assert res["input"] == "Test Input"
 
     # Verify that the run was updated in the file system
-    updated_run = improvement_task.runs()[0]
+    updated_run = improvement_task.runs(include_intermediate_runs=True)[0]
     assert updated_run.repair_instructions == "Fix this issue"
     assert updated_run.repaired_output == mock_repair_task_run.output
 

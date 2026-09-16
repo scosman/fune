@@ -224,7 +224,7 @@
         warning_message="Please provide at least one example."
         warning_color="error"
         warning_icon="exclaim"
-        tight
+        inline={true}
       />
     </div>
   {/if}

@@ -16,10 +16,12 @@ from kiln_ai.datamodel import (
     TaskOutput,
     TaskRun,
 )
+from kiln_ai.datamodel.datamodel_enums import TurnMode
 from kiln_ai.utils.dataset_import import (
     DatasetFileImporter,
     DatasetImportFormat,
     ImportConfig,
+    ImportResult,
     KilnInvalidImportFormat,
     add_tag_splits,
     deserialize_tags,
@@ -83,7 +85,7 @@ def task_with_structured_input(base_task: Task):
 
 @pytest.fixture
 def task_with_intermediate_outputs(base_task: Task):
-    for run in base_task.runs():
+    for run in base_task.runs(include_intermediate_runs=True):
         run.intermediate_outputs = {"reasoning": "thinking output"}
     base_task.thinking_instruction = "thinking instructions"
     return base_task
@@ -168,9 +170,9 @@ def test_import_csv_plain_text(base_task: Task, tmp_path):
         # Verify add_tag_splits was called
         mock_add_tag_splits.assert_called_once()
 
-    assert len(base_task.runs()) == 4
+    assert len(base_task.runs(include_intermediate_runs=True)) == 4
 
-    for run in base_task.runs():
+    for run in base_task.runs(include_intermediate_runs=True):
         # identify the row data with same input as the run
         match = next(
             (row for row in row_data if row["input"] == run.input),
@@ -251,11 +253,11 @@ def test_import_csv_default_tags(base_task: Task, tmp_path):
 
     importer.create_runs_from_file()
 
-    assert len(base_task.runs()) == 2
+    assert len(base_task.runs(include_intermediate_runs=True)) == 2
 
     default_tags = 2
 
-    for run in base_task.runs():
+    for run in base_task.runs(include_intermediate_runs=True):
         # identify the row data with same input as the run
         match = next(
             (row for row in row_data if row["input"] == run.input),
@@ -326,8 +328,9 @@ def test_import_csv_utf8_encoding(base_task: Task, tmp_path):
 
     importer.create_runs_from_file()
 
-    assert len(base_task.runs()) == 1
-    run = base_task.runs()[0]
+    runs = base_task.runs(include_intermediate_runs=True)
+    assert len(runs) == 1
+    run = runs[0]
     assert run.input == "Español entrada 你好👋"
     assert run.output.output == "salida áéí 你好👋"
 
@@ -364,9 +367,9 @@ def test_import_csv_structured_output(task_with_structured_output: Task, tmp_pat
 
     importer.create_runs_from_file()
 
-    assert len(task_with_structured_output.runs()) == 3
+    assert len(task_with_structured_output.runs(include_intermediate_runs=True)) == 3
 
-    for run in task_with_structured_output.runs():
+    for run in task_with_structured_output.runs(include_intermediate_runs=True):
         # identify the row data with same input as the run
         match = next(
             (row for row in row_data if row["input"] == run.input),
@@ -501,9 +504,9 @@ def test_import_csv_intermediate_outputs_reasoning(
 
     importer.create_runs_from_file()
 
-    assert len(task_with_intermediate_outputs.runs()) == 3
+    assert len(task_with_intermediate_outputs.runs(include_intermediate_runs=True)) == 3
 
-    for run in task_with_intermediate_outputs.runs():
+    for run in task_with_intermediate_outputs.runs(include_intermediate_runs=True):
         # identify the row data with same input as the run
         match = next(
             (row for row in row_data if row["input"] == run.input),
@@ -553,9 +556,9 @@ def test_import_csv_intermediate_outputs_cot(
 
     importer.create_runs_from_file()
 
-    assert len(task_with_intermediate_outputs.runs()) == 3
+    assert len(task_with_intermediate_outputs.runs(include_intermediate_runs=True)) == 3
 
-    for run in task_with_intermediate_outputs.runs():
+    for run in task_with_intermediate_outputs.runs(include_intermediate_runs=True):
         # identify the row data with same input as the run
         match = next(
             (row for row in row_data if row["input"] == run.input),
@@ -595,9 +598,9 @@ def test_import_csv_intermediate_outputs_reasoning_and_cot(
 
     importer.create_runs_from_file()
 
-    assert len(task_with_intermediate_outputs.runs()) == 1
+    assert len(task_with_intermediate_outputs.runs(include_intermediate_runs=True)) == 1
 
-    for run in task_with_intermediate_outputs.runs():
+    for run in task_with_intermediate_outputs.runs(include_intermediate_runs=True):
         # identify the row data with same input as the run
         match = next(
             (row for row in row_data if row["input"] == run.input),
@@ -897,3 +900,601 @@ def test_dataset_file_importer_validates_tag_splits(base_task: Task, tmp_path):
         ),
     )
     assert importer.config.tag_splits == {"train": 0.7, "test": 0.3}
+
+
+# ----------------------------- Multiturn tests -----------------------------
+
+
+@pytest.fixture
+def multiturn_task(tmp_path) -> Task:
+    project_path = tmp_path / "project.kiln"
+    project = Project(name="MultiTurnProject", path=str(project_path))
+    project.save_to_file()
+
+    task = Task(
+        name="Multiturn Task",
+        parent=project,
+        description="Have a multiturn conversation",
+        instruction="Have a multiturn conversation",
+        turn_mode=TurnMode.multiturn,
+        requirements=[],
+    )
+    task.save_to_file()
+    return task
+
+
+def _two_turn_trace() -> list[dict]:
+    return [
+        {"role": "user", "content": "Hi"},
+        {"role": "assistant", "content": "Hello!"},
+        {"role": "user", "content": "What is 2+2?"},
+        {"role": "assistant", "content": "4"},
+    ]
+
+
+def _single_pair_trace() -> list[dict]:
+    return [
+        {"role": "user", "content": "Hi"},
+        {"role": "assistant", "content": "Hello!"},
+    ]
+
+
+def _import_multiturn_csv(
+    task: Task,
+    rows: list[dict],
+    tmp_path: Path,
+    file_name: str = "multiturn.csv",
+    tag_splits: dict | None = None,
+) -> ImportResult:
+    """Write rows to a CSV and run the multiturn importer."""
+
+    file_path = dicts_to_file_as_csv(rows, file_name, tmp_path)
+    importer = DatasetFileImporter(
+        task,
+        ImportConfig(
+            dataset_type=DatasetImportFormat.CSV,
+            dataset_path=file_path,
+            dataset_name=file_name,
+            tag_splits=tag_splits,
+        ),
+    )
+    return importer.create_runs_from_file()
+
+
+def test_import_csv_multiturn_basic(multiturn_task: Task, tmp_path):
+    result = _import_multiturn_csv(
+        multiturn_task,
+        [{"trace": json.dumps(_two_turn_trace())}],
+        tmp_path,
+    )
+
+    runs = multiturn_task.runs(include_intermediate_runs=True)
+    assert len(runs) == 2
+    assert result.imported_run_count == 2
+    assert result.imported_conversation_count == 1
+
+    by_input = {run.input: run for run in runs}
+    root = by_input["Hi"]
+    leaf = by_input["What is 2+2?"]
+    assert root.parent_task_run_id is None
+    assert leaf.parent_task_run_id == root.id
+    assert root.trace is not None and len(root.trace) == 2
+    assert leaf.trace is not None and len(leaf.trace) == 4
+
+
+def test_import_csv_multiturn_single_turn_conversation(multiturn_task: Task, tmp_path):
+    result = _import_multiturn_csv(
+        multiturn_task,
+        [{"trace": json.dumps(_single_pair_trace())}],
+        tmp_path,
+    )
+
+    runs = multiturn_task.runs(include_intermediate_runs=True)
+    assert len(runs) == 1
+    assert runs[0].parent_task_run_id is None
+    assert result.imported_run_count == 1
+    assert result.imported_conversation_count == 1
+
+
+def test_import_csv_multiturn_multiple_conversations(multiturn_task: Task, tmp_path):
+    rows = [
+        {"trace": json.dumps(_single_pair_trace())},
+        {"trace": json.dumps(_two_turn_trace())},
+    ]
+    result = _import_multiturn_csv(multiturn_task, rows, tmp_path)
+
+    assert result.imported_conversation_count == 2
+    assert result.imported_run_count == 3
+
+    runs = multiturn_task.runs(include_intermediate_runs=True)
+    # The root TaskRuns of each chain must have no parent.
+    roots = [r for r in runs if r.parent_task_run_id is None]
+    assert len(roots) == 2
+
+    # Children's parent ids must always refer to a sibling within the same chain.
+    run_ids = {r.id for r in runs}
+    for r in runs:
+        if r.parent_task_run_id is not None:
+            assert r.parent_task_run_id in run_ids
+
+
+def test_import_csv_multiturn_reasoning_content(multiturn_task: Task, tmp_path):
+    trace = [
+        {"role": "user", "content": "ping"},
+        {
+            "role": "assistant",
+            "content": "pong",
+            "reasoning_content": "thinking about ping",
+        },
+    ]
+    _import_multiturn_csv(
+        multiturn_task,
+        [{"trace": json.dumps(trace)}],
+        tmp_path,
+    )
+
+    runs = multiturn_task.runs(include_intermediate_runs=True)
+    assert len(runs) == 1
+    assert runs[0].intermediate_outputs == {"reasoning": "thinking about ping"}
+
+
+def test_import_csv_multiturn_no_reasoning_content(multiturn_task: Task, tmp_path):
+    _import_multiturn_csv(
+        multiturn_task,
+        [{"trace": json.dumps(_single_pair_trace())}],
+        tmp_path,
+    )
+
+    runs = multiturn_task.runs(include_intermediate_runs=True)
+    assert len(runs) == 1
+    assert runs[0].intermediate_outputs is None
+
+
+def test_import_csv_multiturn_tags_on_all_runs(multiturn_task: Task, tmp_path):
+    _import_multiturn_csv(
+        multiturn_task,
+        [{"trace": json.dumps(_two_turn_trace()), "tags": "alpha,beta"}],
+        tmp_path,
+    )
+
+    runs = multiturn_task.runs(include_intermediate_runs=True)
+    assert len(runs) == 2
+    for run in runs:
+        assert "alpha" in run.tags
+        assert "beta" in run.tags
+
+
+def test_import_csv_multiturn_splits_apply_to_leaves_only(
+    multiturn_task: Task, tmp_path
+):
+    rows = [{"trace": json.dumps(_two_turn_trace())} for _ in range(10)]
+    _import_multiturn_csv(
+        multiturn_task,
+        rows,
+        tmp_path,
+        tag_splits={"train": 0.7, "test": 0.3},
+    )
+
+    runs = multiturn_task.runs(include_intermediate_runs=True)
+    # A leaf is any node that is not referenced as a parent by any other run.
+    # This stays correct for chains of arbitrary depth (not just 2 turns).
+    referenced_parent_ids = {
+        r.parent_task_run_id for r in runs if r.parent_task_run_id is not None
+    }
+    leaves = [r for r in runs if r.id not in referenced_parent_ids]
+    non_leaves = [r for r in runs if r.id in referenced_parent_ids]
+
+    assert len(leaves) == 10
+    assert len(non_leaves) == 10
+
+    for r in non_leaves:
+        assert "train" not in r.tags
+        assert "test" not in r.tags
+
+    leaf_split_count = sum(1 for r in leaves if "train" in r.tags or "test" in r.tags)
+    assert leaf_split_count == 10
+
+
+def test_import_csv_multiturn_returns_imported_result(multiturn_task: Task, tmp_path):
+    rows = [
+        {"trace": json.dumps(_two_turn_trace())},
+        {"trace": json.dumps(_single_pair_trace())},
+    ]
+    result = _import_multiturn_csv(multiturn_task, rows, tmp_path)
+
+    assert isinstance(result, ImportResult)
+    assert result.imported_run_count == 3
+    assert result.imported_conversation_count == 2
+
+
+def test_import_csv_multiturn_input_output_derived(multiturn_task: Task, tmp_path):
+    _import_multiturn_csv(
+        multiturn_task,
+        [{"trace": json.dumps(_two_turn_trace())}],
+        tmp_path,
+    )
+
+    runs = multiturn_task.runs(include_intermediate_runs=True)
+    inputs = {r.input for r in runs}
+    outputs = {r.output.output for r in runs}
+    assert inputs == {"Hi", "What is 2+2?"}
+    assert outputs == {"Hello!", "4"}
+
+
+def test_import_csv_multiturn_data_source_is_file_import(
+    multiturn_task: Task, tmp_path
+):
+    _import_multiturn_csv(
+        multiturn_task,
+        [{"trace": json.dumps(_single_pair_trace())}],
+        tmp_path,
+        file_name="my_upload.csv",
+    )
+
+    runs = multiturn_task.runs(include_intermediate_runs=True)
+    for r in runs:
+        assert r.input_source is not None
+        assert r.input_source.type == DataSourceType.file_import
+        assert r.input_source.properties["file_name"] == "my_upload.csv"
+        assert r.output.source.type == DataSourceType.file_import
+        assert r.output.source.properties["file_name"] == "my_upload.csv"
+
+
+def test_import_csv_multiturn_missing_trace_column(multiturn_task: Task, tmp_path):
+    rows = [{"input": "x", "output": "y"}]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, rows, tmp_path)
+    assert "Task is multiturn" in str(e.value)
+    assert "trace" in str(e.value)
+
+
+def test_import_csv_multiturn_rejects_singleturn_columns_when_trace_present(
+    multiturn_task: Task, tmp_path
+):
+    rows = [{"trace": json.dumps(_single_pair_trace()), "input": "x", "output": "y"}]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, rows, tmp_path)
+    assert "Task is multiturn" in str(e.value)
+
+
+def test_import_csv_multiturn_invalid_json_trace(multiturn_task: Task, tmp_path):
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": "not json"}], tmp_path)
+    assert e.value.row_number == 2
+    assert "trace is not valid JSON" in str(e.value)
+
+
+def test_import_csv_multiturn_trace_not_array(multiturn_task: Task, tmp_path):
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(
+            multiturn_task,
+            [{"trace": json.dumps({"role": "user", "content": "hi"})}],
+            tmp_path,
+        )
+    assert "must be a JSON array" in str(e.value)
+
+
+@pytest.mark.parametrize(
+    "trace_value",
+    [
+        json.dumps([]),
+        json.dumps([{"role": "user", "content": "hi"}]),
+    ],
+)
+def test_import_csv_multiturn_trace_too_short(
+    multiturn_task: Task, tmp_path, trace_value: str
+):
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": trace_value}], tmp_path)
+    assert "at least one user message followed by one assistant message" in str(e.value)
+
+
+def test_import_csv_multiturn_unknown_role(multiturn_task: Task, tmp_path):
+    trace = [
+        {"role": "user", "content": "hi"},
+        {"role": "function", "content": "result"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "unsupported role 'function'" in str(e.value)
+
+
+def test_import_csv_multiturn_system_message_rejected(multiturn_task: Task, tmp_path):
+    trace = [
+        {"role": "system", "content": "be brief"},
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    msg = str(e.value)
+    assert "system message" in msg
+    assert "system prompt on the task itself" in msg
+
+
+def test_import_csv_multiturn_developer_message_rejected(
+    multiturn_task: Task, tmp_path
+):
+    trace = [
+        {"role": "developer", "content": "be brief"},
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "developer message" in str(e.value)
+
+
+def test_import_csv_multiturn_tool_role_rejected(multiturn_task: Task, tmp_path):
+    trace = [
+        {"role": "user", "content": "hi"},
+        {"role": "tool", "content": "result", "tool_call_id": "x"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "tool calls and tool messages are not supported" in str(e.value)
+
+
+def test_import_csv_multiturn_assistant_with_tool_calls_rejected(
+    multiturn_task: Task, tmp_path
+):
+    trace = [
+        {"role": "user", "content": "hi"},
+        {
+            "role": "assistant",
+            "content": "ok",
+            "tool_calls": [{"id": "x", "type": "function"}],
+        },
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "tool calls and tool messages are not supported" in str(e.value)
+
+
+def test_import_csv_multiturn_empty_content(multiturn_task: Task, tmp_path):
+    trace = [
+        {"role": "user", "content": ""},
+        {"role": "assistant", "content": "hello"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "'content' must be a non-empty string" in str(e.value)
+
+
+def test_import_csv_multiturn_non_string_content(multiturn_task: Task, tmp_path):
+    trace = [
+        {"role": "user", "content": 42},
+        {"role": "assistant", "content": "hi"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "'content' must be a non-empty string" in str(e.value)
+
+
+def test_import_csv_multiturn_multi_part_content_rejected(
+    multiturn_task: Task, tmp_path
+):
+    """Functional spec §2.2: array-form content (e.g. [{type: 'text', ...}]) is rejected in v1."""
+
+    trace = [
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "hi"}],
+        },
+        {"role": "assistant", "content": "hello"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "'content' must be a non-empty string" in str(e.value)
+
+
+def test_import_csv_multiturn_missing_role(multiturn_task: Task, tmp_path):
+    """A message with no role surfaces a friendly row-level error."""
+
+    trace = [
+        {"content": "hi"},
+        {"role": "assistant", "content": "hello"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "'role' is required" in str(e.value)
+
+
+def test_import_csv_multiturn_empty_reasoning_content(multiturn_task: Task, tmp_path):
+    """Empty-string `reasoning_content` is rejected for consistency with `content`."""
+
+    trace = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello", "reasoning_content": ""},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "'reasoning_content' must be a non-empty string" in str(e.value)
+
+
+def test_import_csv_multiturn_reasoning_content_on_user_message_rejected(
+    multiturn_task: Task, tmp_path
+):
+    """`reasoning_content` on a user message must fail rather than be silently dropped."""
+
+    trace = [
+        {"role": "user", "content": "hi", "reasoning_content": "stray thought"},
+        {"role": "assistant", "content": "hello"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "'reasoning_content' is only allowed on assistant messages" in str(e.value)
+
+
+def test_import_csv_multiturn_starts_with_assistant(multiturn_task: Task, tmp_path):
+    trace = [
+        {"role": "assistant", "content": "hi"},
+        {"role": "user", "content": "hello"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "expected role 'user', got 'assistant'" in str(e.value)
+
+
+def test_import_csv_multiturn_does_not_alternate(multiturn_task: Task, tmp_path):
+    trace = [
+        {"role": "user", "content": "hi"},
+        {"role": "user", "content": "hello"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "expected role 'assistant', got 'user'" in str(e.value)
+
+
+def test_import_csv_multiturn_ends_with_user(multiturn_task: Task, tmp_path):
+    # 3-message trace alternates user/assistant/user — ends on user.
+    trace = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello"},
+        {"role": "user", "content": "bye"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+    assert "trace must end with an assistant message" in str(e.value)
+
+
+def test_import_csv_multiturn_invalid_tag(multiturn_task: Task, tmp_path):
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        _import_multiturn_csv(
+            multiturn_task,
+            [
+                {
+                    "trace": json.dumps(_single_pair_trace()),
+                    "tags": "good_tag,bad tag",
+                }
+            ],
+            tmp_path,
+        )
+    msg = str(e.value)
+    assert "Tags cannot contain spaces" in msg
+    assert e.value.row_number == 2
+    # The friendly row-level error must NOT leak the pydantic data-model path
+    # (e.g. `tags -> 0:`) — that's confusing for CSV authors.
+    assert "tags -> 0" not in msg
+
+
+def test_import_csv_multiturn_preflight_no_partial_save(multiturn_task: Task, tmp_path):
+    rows = [
+        {"trace": json.dumps(_single_pair_trace())},
+        {"trace": "not json"},
+    ]
+    with pytest.raises(KilnInvalidImportFormat):
+        _import_multiturn_csv(multiturn_task, rows, tmp_path)
+
+    assert multiturn_task.runs(include_intermediate_runs=True) == []
+
+
+def _failing_save(fail_on_call: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch TaskRun.save_to_file to raise on the Nth call, saving normally before."""
+    original_save = TaskRun.save_to_file
+    calls = {"count": 0}
+
+    def save(self: TaskRun) -> None:
+        calls["count"] += 1
+        if calls["count"] == fail_on_call:
+            raise OSError("disk full")
+        original_save(self)
+
+    monkeypatch.setattr(TaskRun, "save_to_file", save)
+
+
+def test_import_csv_multiturn_save_failure_rolls_back(
+    multiturn_task: Task, tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    # A mid-chain save failure must not leave a truncated chain behind: its
+    # last-saved run would pose as a complete conversation's leaf.
+    trace = []
+    for i in range(5):
+        trace.append({"role": "user", "content": f"q{i}"})
+        trace.append({"role": "assistant", "content": f"a{i}"})
+
+    _failing_save(fail_on_call=3, monkeypatch=monkeypatch)
+    with pytest.raises(OSError, match="disk full"):
+        _import_multiturn_csv(multiturn_task, [{"trace": json.dumps(trace)}], tmp_path)
+
+    assert multiturn_task.runs(include_intermediate_runs=True) == []
+
+
+def test_import_csv_single_turn_save_failure_rolls_back(
+    base_task: Task, tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    rows = [{"input": f"in {i}", "output": f"out {i}"} for i in range(3)]
+    file_path = dicts_to_file_as_csv(rows, "test.csv", tmp_path)
+    importer = DatasetFileImporter(
+        base_task,
+        ImportConfig(
+            dataset_type=DatasetImportFormat.CSV,
+            dataset_path=file_path,
+            dataset_name="test.csv",
+        ),
+    )
+
+    _failing_save(fail_on_call=2, monkeypatch=monkeypatch)
+    with pytest.raises(OSError, match="disk full"):
+        importer.create_runs_from_file()
+
+    assert base_task.runs() == []
+
+
+def test_import_csv_single_turn_task_rejects_trace_csv(base_task: Task, tmp_path):
+    rows = [{"trace": json.dumps(_single_pair_trace())}]
+    file_path = dicts_to_file_as_csv(rows, "trace_only.csv", tmp_path)
+
+    importer = DatasetFileImporter(
+        base_task,
+        ImportConfig(
+            dataset_type=DatasetImportFormat.CSV,
+            dataset_path=file_path,
+            dataset_name="trace_only.csv",
+        ),
+    )
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        importer.create_runs_from_file()
+
+    assert "Task is single-turn" in str(e.value)
+    assert "input, output" in str(e.value)
+
+
+def test_import_csv_single_turn_rejects_trace_when_singleturn_columns_present(
+    base_task: Task, tmp_path
+):
+    rows = [{"input": "i", "output": "o", "trace": json.dumps(_single_pair_trace())}]
+    file_path = dicts_to_file_as_csv(rows, "mixed.csv", tmp_path)
+
+    importer = DatasetFileImporter(
+        base_task,
+        ImportConfig(
+            dataset_type=DatasetImportFormat.CSV,
+            dataset_path=file_path,
+            dataset_name="mixed.csv",
+        ),
+    )
+    with pytest.raises(KilnInvalidImportFormat) as e:
+        importer.create_runs_from_file()
+
+    assert "Task is single-turn" in str(e.value)
+
+
+def test_import_csv_single_turn_returns_imported_result(base_task: Task, tmp_path):
+    rows = [
+        {"input": "i1", "output": "o1", "tags": ""},
+        {"input": "i2", "output": "o2", "tags": ""},
+    ]
+    file_path = dicts_to_file_as_csv(rows, "test.csv", tmp_path)
+    importer = DatasetFileImporter(
+        base_task,
+        ImportConfig(
+            dataset_type=DatasetImportFormat.CSV,
+            dataset_path=file_path,
+            dataset_name="test.csv",
+        ),
+    )
+    result = importer.create_runs_from_file()
+    assert isinstance(result, ImportResult)
+    assert result.imported_run_count == 2
+    assert result.imported_conversation_count is None

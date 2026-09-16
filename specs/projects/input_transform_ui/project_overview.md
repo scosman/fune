@@ -1,5 +1,5 @@
 ---
-status: draft
+status: complete
 ---
 
 # Input Transformer UI
@@ -10,7 +10,7 @@ Input transformers let a run config transform the raw task input before it's sen
 
 ## The Problem
 
-There is currently zero indication in the UI of whether a run config has an input transformer. Example run-config details URL:
+Previously there was zero indication in the UI of whether a run config had an input transformer. Example run-config details URL:
 `/optimize/189194447825/920784333097/run_config/finetune_run_config::189194447825::920784333097::251360413936`
 
 ## Goals

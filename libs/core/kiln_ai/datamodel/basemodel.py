@@ -767,7 +767,7 @@ class KilnParentedModel(KilnBaseModel, metaclass=ABCMeta):
 
     @classmethod
     def from_ids_and_parent_path(
-        cls: Type[PT], ids: Set[str], parent_path: Path | None
+        cls: Type[PT], ids: Set[str], parent_path: Path | None, readonly: bool = False
     ) -> Dict[str, PT]:
         """
         Bulk equivalent of from_id_and_parent_path, much faster for large collections.
@@ -775,6 +775,9 @@ class KilnParentedModel(KilnBaseModel, metaclass=ABCMeta):
         It picks out the matching models from the directory only once. This avoids
         doing individual costly lookups that scan the whole directory in scenarios
         where we need to iterate over a large collection of models (e.g. bulk tagging).
+
+        Pass readonly=True for read-only consumers: cache hits are returned directly,
+        skipping a deep copy per matched model.
         """
         if parent_path is None:
             return {}
@@ -785,9 +788,9 @@ class KilnParentedModel(KilnBaseModel, metaclass=ABCMeta):
         for child_path in cls.iterate_children_paths_of_parent_path(parent_path):
             child_id = ModelCache.shared().get_model_id(child_path, cls)
             if child_id in ids:
-                children[child_id] = cls.load_from_file(child_path)
+                children[child_id] = cls.load_from_file(child_path, readonly=readonly)
             if child_id is None:
-                child = cls.load_from_file(child_path)
+                child = cls.load_from_file(child_path, readonly=readonly)
                 if child.id in ids:
                     children[child.id] = child
 

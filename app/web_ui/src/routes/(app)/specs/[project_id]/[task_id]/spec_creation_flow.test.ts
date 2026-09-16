@@ -1,11 +1,9 @@
 import { describe, it, expect } from "vitest"
 import {
-  parseSpecWorkflow,
   implied_judge_for_spec_type,
   eval_template_for_spec_type,
   next_page_after_template,
   next_page_after_judge,
-  copilot_supported,
   judge_only_builder_url,
   spec_builder_url,
   buildSpecDefinition,
@@ -17,21 +15,6 @@ import {
 import type { SpecType } from "$lib/types"
 
 const ALL_SPEC_TYPES = Object.keys(spec_field_configs) as SpecType[]
-
-describe("parseSpecWorkflow", () => {
-  it("returns pro only for an explicit pro param", () => {
-    expect(parseSpecWorkflow("pro")).toBe("pro")
-  })
-
-  // Kiln Pro must never appear to someone who chose Manual, so anything that
-  // isn't an explicit "pro" has to fall back to manual.
-  it.each([["manual"], [null], [""], ["PRO"], ["garbage"]])(
-    "falls back to manual for %s",
-    (value) => {
-      expect(parseSpecWorkflow(value)).toBe("manual")
-    },
-  )
-})
 
 describe("core field invariant", () => {
   // The non-LLM judge flow only shows the core field and saves every other field
@@ -107,71 +90,45 @@ describe("eval_template_for_spec_type", () => {
 })
 
 describe("next_page_after_template", () => {
-  it("sends the open behaviour templates to the workflow screen (LLM implied)", () => {
-    const url = next_page_after_template("p1", "t1", "issue")
-    expect(url).toContain("/specs/p1/t1/select_workflow?")
-    expect(url).toContain("type=issue")
-    expect(url).toContain("judge=llm_judge")
-  })
+  // The template picker is the last question in the flow: every template goes
+  // straight to the manual spec builder, with no workflow screen in between.
+  it.each(ALL_SPEC_TYPES)(
+    "sends %s to the manual spec builder",
+    (spec_type) => {
+      const url = new URL(
+        next_page_after_template("p1", "t1", spec_type),
+        "http://localhost",
+      )
+      expect(url.pathname).toBe("/specs/p1/t1/spec_builder")
+      expect(url.searchParams.get("type")).toBe(spec_type)
+      expect(url.searchParams.get("workflow")).toBe("manual")
+      expect(url.searchParams.get("judge")).toBe(
+        implied_judge_for_spec_type(spec_type),
+      )
+    },
+  )
 
-  it("sends rubric templates to the Pro-vs-Manual workflow screen", () => {
-    const url = next_page_after_template("p1", "t1", "toxicity")
-    expect(url).toContain("/specs/p1/t1/select_workflow?")
-    expect(url).toContain("type=toxicity")
-    expect(url).toContain("judge=llm_judge")
-  })
-
-  it("skips both pickers for tool call, prefilling the tool call judge", () => {
+  it("prefills the tool call judge for tool call evals", () => {
     const url = next_page_after_template("p1", "t1", "appropriate_tool_use")
-    expect(url).toContain("/specs/p1/t1/spec_builder?")
-    expect(url).toContain("type=appropriate_tool_use")
     expect(url).toContain("judge=tool_call_check")
-    expect(url).toContain("workflow=manual")
-  })
-
-  // Kiln Pro doesn't support RAG specs, so the workflow screen is skipped.
-  it("skips the workflow screen for reference answer, going manual", () => {
-    const url = next_page_after_template(
-      "p1",
-      "t1",
-      "reference_answer_accuracy",
-    )
-    expect(url).toContain("/specs/p1/t1/spec_builder?")
-    expect(url).toContain("judge=llm_judge")
-    expect(url).toContain("workflow=manual")
   })
 })
 
 describe("next_page_after_judge", () => {
-  it("sends copilot-eligible combos to the workflow screen", () => {
-    const url = next_page_after_judge("p1", "t1", "issue", "llm_judge")
-    expect(url).toContain("/specs/p1/t1/select_workflow?")
-    expect(url).toContain("type=issue")
-    expect(url).toContain("judge=llm_judge")
-  })
-
-  it("sends non-LLM judges straight to the manual builder", () => {
-    const url = next_page_after_judge("p1", "t1", "issue", "code_eval")
-    expect(url).toContain("/specs/p1/t1/spec_builder?")
-    expect(url).toContain("judge=code_eval")
-    expect(url).toContain("workflow=manual")
-  })
-})
-
-describe("copilot_supported", () => {
-  it("requires an LLM judge", () => {
-    expect(copilot_supported("issue", "llm_judge")).toBe(true)
-    expect(copilot_supported("issue", "code_eval")).toBe(false)
-    expect(copilot_supported("issue", "exact_match")).toBe(false)
-  })
-
-  it("excludes tool call and RAG spec types", () => {
-    expect(copilot_supported("appropriate_tool_use", "llm_judge")).toBe(false)
-    expect(copilot_supported("reference_answer_accuracy", "llm_judge")).toBe(
-      false,
-    )
-    expect(copilot_supported("toxicity", "llm_judge")).toBe(true)
-  })
+  // Both the judge combos Kiln Pro used to claim and the ones it never
+  // supported now land in the same place.
+  it.each([["llm_judge"], ["code_eval"], ["exact_match"]] as const)(
+    "sends %s straight to the manual builder",
+    (judge) => {
+      const url = new URL(
+        next_page_after_judge("p1", "t1", "issue", judge),
+        "http://localhost",
+      )
+      expect(url.pathname).toBe("/specs/p1/t1/spec_builder")
+      expect(url.searchParams.get("judge")).toBe(judge)
+      expect(url.searchParams.get("workflow")).toBe("manual")
+    },
+  )
 })
 
 describe("judge_only_builder_url", () => {
@@ -198,4 +155,30 @@ describe("spec_builder_url", () => {
     expect(url.searchParams.get("workflow")).toBe("manual")
     expect(url.searchParams.get("judge")).toBe("pattern_match")
   })
+})
+
+describe("the removed Kiln Pro creation path", () => {
+  // The workflow screen and the builder's pro mode are gone. No entry point
+  // into eval creation may route to either, whatever the template or judge.
+  it.each(ALL_SPEC_TYPES)(
+    "is unreachable from the %s template",
+    (spec_type) => {
+      const urls = [
+        next_page_after_template("p1", "t1", spec_type),
+        next_page_after_judge(
+          "p1",
+          "t1",
+          spec_type,
+          implied_judge_for_spec_type(spec_type),
+        ),
+        judge_only_builder_url("p1", "t1", "code_eval"),
+      ]
+      for (const url of urls) {
+        expect(url).not.toContain("select_workflow")
+        expect(
+          new URL(url, "http://localhost").searchParams.get("workflow"),
+        ).toBe("manual")
+      }
+    },
+  )
 })

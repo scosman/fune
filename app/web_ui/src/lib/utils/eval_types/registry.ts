@@ -66,12 +66,16 @@ export type EvalTypeTag = { label: string; tone: "default" | "beta" }
  * - `"llm_judge"` — referenced via Jinja in the judge prompt
  * - `"reference_field"` — compared via a selected Reference Data Field
  * - `"code"` — passed as the `reference_data` argument to scoring code
+ * - `"optional"` — not required, but a custom Jinja output expression may read
+ *   it (as in `pattern_match`); the editor is shown so such expressions can be
+ *   tested
  * - `"none"` — never read; the Reference Data field is hidden entirely
  */
 export type ReferenceDataUsageMode =
   | "llm_judge"
   | "reference_field"
   | "code"
+  | "optional"
   | "none"
 
 /**
@@ -159,8 +163,15 @@ function declaredReferenceDataUsageMode(
     case "code_eval":
       return "code"
     case "pattern_match":
+      // pattern_match has no reference_key, but its value_expression is Jinja
+      // evaluated against the full EvalTaskInput (which includes reference_data).
+      // Like llm_judge's prompt, such an expression can read reference_data, so
+      // the editor is shown to keep those expressions testable.
+      return "optional"
     case "tool_call_check":
     case "step_count_check":
+      // Typed trace inspectors with no value_expression; reference_data is
+      // never read, so the editor stays hidden.
       return "none"
     default:
       return assertNever(type)

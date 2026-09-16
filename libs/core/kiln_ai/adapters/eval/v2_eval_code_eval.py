@@ -1,5 +1,6 @@
 """V2 adapter for code_eval: runs user-authored Python scorer in a sandboxed subprocess."""
 
+import math
 from threading import Lock
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -137,10 +138,22 @@ class CodeEvalAdapter(BaseV2EvalBridge):
                     f"Score '{key}' returned a bool. Use a float (e.g. 1.0 for pass, 0.0 for fail)."
                 )
             if isinstance(value, int):
-                value = float(value)
+                try:
+                    value = float(value)
+                except OverflowError:
+                    # An int too large for a float, e.g. 10**400.
+                    raise RuntimeError(
+                        f"Score '{key}' must be a finite number, got {value}"
+                    ) from None
             if not isinstance(value, float):
                 raise RuntimeError(
                     f"Score '{key}' must be a float, got {type(value).__name__}"
+                )
+            # Fail here, in the scorer's own error surface, rather than at EvalRun
+            # save time where the message loses the code eval context.
+            if not math.isfinite(value):
+                raise RuntimeError(
+                    f"Score '{key}' must be a finite number, got {value}"
                 )
             validated[key] = value
 

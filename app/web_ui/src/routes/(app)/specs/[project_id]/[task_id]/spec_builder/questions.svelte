@@ -19,6 +19,8 @@
   export let error: KilnError | null
   export let submitting: boolean
   export let warn_before_unload: boolean
+  // Overridable so consumers can match their flow's advance-button wording.
+  export let submit_label = "Continue"
 
   // Track the selected option for each question (bound to parent to survive remounts)
   // "other" means the user selected the "Other" option
@@ -76,6 +78,10 @@
       submitting = false
       return
     }
+    // Clear any earlier validation error once validation passes — error is
+    // bound to the parent to survive remounts, so a stale message would
+    // otherwise reappear if the user navigates back to this form.
+    error = null
 
     const questions_and_answers = build_question_answers()
     await on_submit(questions_and_answers)
@@ -99,7 +105,7 @@
 
 <div class="max-w-4xl">
   <FormContainer
-    submit_label="Continue"
+    {submit_label}
     compact_button={true}
     on:submit={handle_submit}
     bind:error
@@ -110,10 +116,13 @@
     <div class="flex flex-col">
       <div class="font-medium">Answer Clarifying Questions</div>
       <div class="font-light text-gray-500 text-sm">
-        Your answers to these questions will help Kiln refine your eval: <button
-          class="link text-sm text-left text-gray-500 hover:text-gray-700"
-          on:click={open_details_dialog}>{name}</button
-        >.
+        <!-- The eval may be unnamed at this point (the v2 builder names it a
+             step later) — only render the details link when a name exists. -->
+        Your answers to these questions will help Kiln refine your eval{#if name.trim()}:
+          <button
+            class="link text-sm text-left text-gray-500 hover:text-gray-700"
+            on:click={open_details_dialog}>{name}</button
+          >{/if}.
       </div>
     </div>
     <div class="border-t" />
@@ -121,14 +130,14 @@
       {#each question_set.questions as question, q_index}
         <div class="flex flex-col">
           <!-- Header row -->
-          <h3 class="text-lg font-medium pb-2">
+          <h3 class="text-base font-medium pb-2">
             Question {q_index + 1}: {question.question_title}
           </h3>
 
           <!-- Content row: body on left, options on right -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
             <!-- Left column: Question body -->
-            <p class="text-gray-500">{question.question_body}</p>
+            <p class="text-sm text-gray-500">{question.question_body}</p>
 
             <!-- Right column: Options -->
             <div class="flex flex-col gap-3">
@@ -137,13 +146,15 @@
                   <input
                     type="radio"
                     name="question-{q_index}"
-                    class="radio mt-0.5"
+                    class="radio radio-sm mt-0.5"
                     checked={selections[q_index] === o_index}
                     on:change={() => select_option(q_index, o_index)}
                   />
                   <div class="flex flex-col">
-                    <span class="font-medium">{option.answer_title}</span>
-                    <span class="text-sm text-gray-500"
+                    <span class="text-sm font-medium"
+                      >{option.answer_title}</span
+                    >
+                    <span class="text-xs text-gray-500"
                       >{option.answer_description}</span
                     >
                   </div>
@@ -154,14 +165,14 @@
                 <input
                   type="radio"
                   name="question-{q_index}"
-                  class="radio mt-0.5"
+                  class="radio radio-sm mt-0.5"
                   checked={selections[q_index] === "other"}
                   on:change={() => select_other(q_index)}
                 />
                 <div class="flex flex-col grow">
-                  <span class="font-medium">Other</span>
+                  <span class="text-sm font-medium">Other</span>
                   <span
-                    class="text-sm text-gray-500 {selections[q_index] ===
+                    class="text-xs text-gray-500 {selections[q_index] ===
                     'other'
                       ? 'hidden'
                       : ''}">Provide a custom answer to this question.</span

@@ -1,0 +1,8 @@
+{
+  "method": "get",
+  "path": "/api/projects/{project_id}/tasks/{task_id}/runs/{run_id}/chain",
+  "agent_policy": {
+    "permission": "allow",
+    "requires_approval": false
+  }
+}

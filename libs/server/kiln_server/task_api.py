@@ -3,6 +3,7 @@ from typing import Annotated, Any, Dict, List
 
 from fastapi import Body, FastAPI, HTTPException, Path
 from kiln_ai.datamodel import Project, Task, TaskRequirement
+from kiln_ai.datamodel.datamodel_enums import TurnMode
 from kiln_ai.datamodel.external_tool_server import (
     ToolServerType,
 )
@@ -137,6 +138,16 @@ def connect_task_api(app: FastAPI):
                 detail="Task ID cannot be changed by client in a patch.",
             )
         original_task = task_from_id(project_id, task_id)
+        if (
+            "turn_mode" in task_updates
+            and task_updates["turn_mode"] != original_task.turn_mode.value
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Task turn_mode cannot be changed after creation.",
+            )
+        if "turn_mode" in task_updates and isinstance(task_updates["turn_mode"], str):
+            task_updates["turn_mode"] = TurnMode(task_updates["turn_mode"])
         updated_task_data = original_task.model_copy(update=task_updates)
         updated_task = Task.validate_and_save_with_subrelations(
             updated_task_data.model_dump(), parent=original_task.parent

@@ -1,8 +1,11 @@
 import asyncio
+import logging
+import os
 from typing import Awaitable, Callable
 
 import pytest
 
+from kiln_ai.adapters.eval.eval_runner import conversation_health_problem
 from kiln_ai.adapters.eval.trace_index import TraceIndex, TraceKey, trace_key
 from kiln_ai.datamodel import (
     DataSource,
@@ -13,6 +16,7 @@ from kiln_ai.datamodel import (
 )
 from kiln_ai.datamodel.eval_splits import ItemSource
 from kiln_ai.datamodel.task_run import EvalItemSource, eval_item_key
+from kiln_ai.utils.open_ai_types import ChatCompletionMessageParam
 
 KEY: TraceKey = ("eval_input", "item1", "rc1")
 
@@ -47,12 +51,14 @@ def save_run(
     run_config_id: str | None = "rc1",
     eval_source: EvalItemSource | None = None,
     output: str = "generated",
+    trace: list[ChatCompletionMessageParam] | None = None,
 ) -> TaskRun:
     run = TaskRun(
         parent=task,
         input="the input",
         output=TaskOutput(output=output, source=output_source(run_config_id)),
         eval_source=eval_source,
+        trace=trace,
     )
     run.save_to_file()
     return run
@@ -65,13 +71,37 @@ def save_trace(
     source_id: str = "item1",
     run_config_id: str | None = "rc1",
     output: str = "generated",
+    trace: list[ChatCompletionMessageParam] | None = None,
 ) -> TaskRun:
     return save_run(
         task,
         run_config_id=run_config_id,
         eval_source=EvalItemSource(source_type=source_type, source_id=source_id),
         output=output,
+        trace=trace,
     )
+
+
+WHOLE_CONVERSATION: list[ChatCompletionMessageParam] = [
+    {"role": "user", "content": "turn 1"},
+    {"role": "assistant", "content": "hello"},
+    {"role": "user", "content": "turn 2"},
+    {"role": "assistant", "content": "goodbye"},
+]
+
+STUMP_CONVERSATION: list[ChatCompletionMessageParam] = [
+    {"role": "user", "content": "turn 1"},
+    {"role": "assistant", "content": "hello"},
+]
+
+
+def two_turn_vet(key: TraceKey, run: TaskRun) -> str | None:
+    """The vet the runner installs, for an item wanting two turns.
+
+    The real predicate rather than a hand-rolled stand-in, so these tests fail if the
+    index stops asking the question the runner actually asks.
+    """
+    return conversation_health_problem(run.trace, 2)
 
 
 class Generator:
@@ -440,3 +470,203 @@ async def test_vanished_trace_file_regenerates(task):
     assert was_generated is True
     assert trace.id != existing.id
     assert generate.calls == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "corrupt_content",
+    [
+        # Truncated JSON, as an in-place write interrupted mid-file leaves behind.
+        '{"v": 1, "id": ',
+        # Valid JSON that no longer validates as a TaskRun.
+        '{"v": 1, "model_type": "task_run"}',
+        # A schema version from a newer build, refused with a plain ValueError.
+        '{"v": 999999, "model_type": "task_run", "input": "i"}',
+    ],
+)
+async def test_corrupt_trace_file_regenerates(task, caplog, corrupt_content):
+    """A trace file that no longer parses degrades like a deleted one: drop the entry,
+    warn, and regenerate — rather than failing every job on this key forever."""
+    existing = save_trace(task)
+    index = TraceIndex(task)
+    assert existing.path is not None
+    existing.path.write_text(corrupt_content, encoding="utf-8")
+    # Bump mtime so the model cache cannot serve the previously loaded instance.
+    stat = existing.path.stat()
+    os.utime(existing.path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+
+    generate = Generator(task)
+    with caplog.at_level(logging.WARNING, logger="kiln_ai.adapters.eval.trace_index"):
+        trace, was_generated = await index.get_or_create(KEY, generate.for_key(KEY))
+
+    assert was_generated is True
+    assert trace.id != existing.id
+    assert generate.calls == 1
+    warning = next(r for r in caplog.records if "failed to load" in r.getMessage())
+    assert warning.levelno == logging.WARNING
+    assert str(existing.path) in warning.getMessage()
+
+    # The regenerated trace is indexed: the next lookup serves it without generating.
+    again, was_generated_again = await index.get_or_create(KEY, generate.for_key(KEY))
+    assert was_generated_again is False
+    assert again.id == trace.id
+
+
+class TestVettedReuse:
+    """The index reuses on key identity; `vet` is where a caller adds "and it is fit"."""
+
+    @pytest.mark.asyncio
+    async def test_seed_skips_an_unfit_candidate_so_a_fit_one_wins(self, task, caplog):
+        """An unfit record must not shadow a fit one at the same key, and rejecting it
+        must not touch the file."""
+        save_trace(task, trace=WHOLE_CONVERSATION, output="one")
+        save_trace(task, trace=WHOLE_CONVERSATION, output="two")
+        # The candidate the scan reaches FIRST is the broken one, so first-wins alone
+        # would serve the stump to every judge of this key.
+        scanned = [
+            run
+            for run in task.runs(readonly=True, include_eval_generated=True)
+            if run.eval_source is not None
+        ]
+        unfit, fit = scanned[0], scanned[1]
+        assert unfit.path is not None
+        stumped = TaskRun.load_from_file(unfit.path)
+        stumped.trace = STUMP_CONVERSATION
+        stumped.save_to_file()
+        bytes_before = unfit.path.read_bytes()
+        generate = Generator(task)
+
+        with caplog.at_level(logging.INFO, logger="kiln_ai.adapters.eval.trace_index"):
+            index = TraceIndex(task, vet=two_turn_vet)
+            trace, was_generated = await index.get_or_create(KEY, generate.for_key(KEY))
+
+        assert was_generated is False
+        assert trace.id == fit.id
+        assert generate.calls == 0
+
+        rejects = [r for r in caplog.records if "failed vetting" in r.getMessage()]
+        assert len(rejects) == 1
+        assert rejects[0].levelno == logging.INFO
+        assert str(unfit.path) in rejects[0].getMessage()
+        # The vet's reason rides the same line as the file it rejected.
+        assert "expected 2 user turns, found 1" in rejects[0].getMessage()
+
+        # Rejection is a log line and nothing else: the file stays exactly as it was.
+        assert unfit.path.exists()
+        assert unfit.path.read_bytes() == bytes_before
+
+    @pytest.mark.asyncio
+    async def test_every_candidate_at_a_key_can_be_unfit(self, task):
+        """No fit candidate means no reuse at all, rather than serving the least bad."""
+        save_trace(task, trace=STUMP_CONVERSATION, output="stump one")
+        save_trace(task, trace=None, output="stump two")
+        generate = Generator(task)
+
+        index = TraceIndex(task, vet=two_turn_vet)
+        trace, was_generated = await index.get_or_create(KEY, generate.for_key(KEY))
+
+        assert was_generated is True
+        assert generate.calls == 1
+        assert trace.output.output == "generated 1"
+
+    @pytest.mark.asyncio
+    async def test_without_a_vet_an_unfit_trace_is_still_served(self, task):
+        """The default is permissive: callers with no fitness question keep key-identity
+        reuse exactly as it was."""
+        existing = save_trace(task, trace=STUMP_CONVERSATION)
+        generate = Generator(task)
+
+        trace, was_generated = await TraceIndex(task).get_or_create(
+            KEY, generate.for_key(KEY)
+        )
+
+        assert was_generated is False
+        assert trace.id == existing.id
+        assert generate.calls == 0
+
+    @pytest.mark.asyncio
+    async def test_indexed_trace_that_became_a_stump_is_re_vetted_at_serve_time(
+        self, task, caplog
+    ):
+        """Passing the vet at seed is not a permanent pass: sync can replace the file
+        with a different conversation after it was indexed."""
+        existing = save_trace(task, trace=WHOLE_CONVERSATION)
+        index = TraceIndex(task, vet=two_turn_vet)
+        assert existing.path is not None
+
+        replaced = TaskRun.load_from_file(existing.path)
+        replaced.trace = STUMP_CONVERSATION
+        replaced.save_to_file()
+        # Bump mtime so the model cache cannot serve the previously loaded instance.
+        stat = existing.path.stat()
+        os.utime(existing.path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+        bytes_on_disk = existing.path.read_bytes()
+
+        generate = Generator(task)
+        with caplog.at_level(
+            logging.WARNING, logger="kiln_ai.adapters.eval.trace_index"
+        ):
+            trace, was_generated = await index.get_or_create(KEY, generate.for_key(KEY))
+
+        assert was_generated is True
+        assert trace.id != existing.id
+        assert generate.calls == 1
+        warning = next(r for r in caplog.records if "failed vetting" in r.getMessage())
+        assert warning.levelno == logging.WARNING
+        assert str(existing.path) in warning.getMessage()
+        # Serve-time rejection carries the reason too, so warnings-and-up logging is
+        # enough to see why a trace was regenerated.
+        assert "expected 2 user turns, found 1" in warning.getMessage()
+
+        # The rejected file is left alone here too, even though it was indexed.
+        assert existing.path.read_bytes() == bytes_on_disk
+
+    @pytest.mark.asyncio
+    async def test_a_raising_vet_counts_as_a_rejection(self, task, caplog):
+        """A broken predicate costs a regeneration, never every job on the key."""
+        save_trace(task, trace=WHOLE_CONVERSATION)
+
+        def exploding_vet(key: TraceKey, run: TaskRun) -> str | None:
+            raise RuntimeError("vet blew up")
+
+        generate = Generator(task)
+        with caplog.at_level(
+            logging.WARNING, logger="kiln_ai.adapters.eval.trace_index"
+        ):
+            index = TraceIndex(task, vet=exploding_vet)
+            trace, was_generated = await index.get_or_create(KEY, generate.for_key(KEY))
+
+        assert was_generated is True
+        assert generate.calls == 1
+        assert trace.path is not None
+        assert any("vet blew up" in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "turns, expect_generated",
+        [(2, False), (3, True)],
+    )
+    async def test_a_migrated_flat_trace_is_vetted_like_any_other(
+        self, task, turns: int, expect_generated: bool
+    ):
+        """Migration synthesizes traces from legacy records and files them under the same
+        keys, so they enter the index unvetted — a partial one must not be served."""
+        migrated = save_run(
+            task,
+            eval_source=EvalItemSource(source_type="eval_input", source_id="item1"),
+            output="goodbye",
+            trace=WHOLE_CONVERSATION,
+        )
+        generate = Generator(task)
+
+        def vet(key: TraceKey, run: TaskRun) -> str | None:
+            return conversation_health_problem(run.trace, turns)
+
+        index = TraceIndex(task, vet=vet)
+        trace, was_generated = await index.get_or_create(KEY, generate.for_key(KEY))
+
+        assert was_generated is expect_generated
+        assert generate.calls == (1 if expect_generated else 0)
+        if not expect_generated:
+            assert trace.id == migrated.id
+        assert migrated.path is not None and migrated.path.exists()

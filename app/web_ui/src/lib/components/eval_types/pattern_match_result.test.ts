@@ -26,17 +26,17 @@ describe("PatternMatchResult", () => {
     expect(container).toBeTruthy()
   })
 
-  it("shows Pass badge when match score is 1.0", () => {
+  it("shows Pass badge when the score is 1.0", () => {
     const { container } = render(PatternMatchResult, {
-      props: { scores: { match: 1.0 }, eval_config: makeConfig() },
+      props: { scores: { matches_pattern: 1.0 }, eval_config: makeConfig() },
     })
     expect(container.textContent).toContain("Pass")
     expect(container.querySelector(".badge-success")).toBeTruthy()
   })
 
-  it("shows Fail badge when match score is 0.0", () => {
+  it("shows Fail badge when the score is 0.0", () => {
     const { container } = render(PatternMatchResult, {
-      props: { scores: { match: 0.0 }, eval_config: makeConfig() },
+      props: { scores: { matches_pattern: 0.0 }, eval_config: makeConfig() },
     })
     expect(container.textContent).toContain("Fail")
     expect(container.querySelector(".badge-error")).toBeTruthy()
@@ -56,7 +56,7 @@ describe("PatternMatchResult", () => {
   it("does not show pass/fail badge when skipped", () => {
     const { container } = render(PatternMatchResult, {
       props: {
-        scores: { match: 0.0 },
+        scores: { matches_pattern: 0.0 },
         skipped_reason: "error",
       },
     })
@@ -67,7 +67,7 @@ describe("PatternMatchResult", () => {
   it("shows pattern from config", () => {
     const { container } = render(PatternMatchResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { matches_pattern: 1.0 },
         eval_config: makeConfig({ pattern: "^hello$" }),
       },
     })
@@ -78,7 +78,7 @@ describe("PatternMatchResult", () => {
   it("shows must_match mode label", () => {
     const { container } = render(PatternMatchResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { matches_pattern: 1.0 },
         eval_config: makeConfig({ mode: "must_match" }),
       },
     })
@@ -88,7 +88,7 @@ describe("PatternMatchResult", () => {
   it("shows must_not_match mode label", () => {
     const { container } = render(PatternMatchResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { matches_pattern: 1.0 },
         eval_config: makeConfig({ mode: "must_not_match" }),
       },
     })
@@ -98,7 +98,7 @@ describe("PatternMatchResult", () => {
   it("shows value_expression from config", () => {
     const { container } = render(PatternMatchResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { matches_pattern: 1.0 },
         eval_config: makeConfig({ value_expression: "$.output" }),
       },
     })
@@ -108,17 +108,17 @@ describe("PatternMatchResult", () => {
 
   it("shows scores via EvalResultScores", () => {
     const { container } = render(PatternMatchResult, {
-      props: { scores: { match: 0.0 } },
+      props: { scores: { matches_pattern: 0.0 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("matches_pattern:")
     expect(container.textContent).toContain("0.00")
   })
 
   it("does not show config details when eval_config is null", () => {
     const { container } = render(PatternMatchResult, {
-      props: { scores: { match: 1.0 } },
+      props: { scores: { matches_pattern: 1.0 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("matches_pattern:")
     expect(container.textContent).not.toContain("Pattern:")
     expect(container.textContent).not.toContain("Mode:")
     expect(container.textContent).not.toContain("Expression:")

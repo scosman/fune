@@ -49,6 +49,8 @@ export function validate_step_requirements(step: WizardStep): boolean {
   switch (step) {
     case "method":
     case "local_file":
+    // local_trust_confirm depends on the component-local selected file path,
+    // which this store-only check can't see; the component gates it directly.
     case "local_trust_confirm":
     case "url":
       return true

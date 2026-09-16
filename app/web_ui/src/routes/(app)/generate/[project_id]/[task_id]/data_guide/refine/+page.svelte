@@ -19,6 +19,11 @@
   import RefiningAnimation from "$lib/ui/animations/refining_animation.svelte"
   import { pending_data_guide_refine_handoff } from "../refine_handoff_store"
   import posthog from "posthog-js"
+  import {
+    data_guide_return,
+    read_data_guide_caller,
+    with_data_guide_caller,
+  } from "$lib/utils/data_guide_return"
 
   type RefineState =
     | "loading"
@@ -66,6 +71,15 @@
 
   $: project_id = $page.params.project_id!
   $: task_id = $page.params.task_id!
+  // Which page opened the setup chain (no key means synthetic data
+  // generation): every link out of here forwards it, and the breadcrumb and
+  // the finish action return to it.
+  $: caller = read_data_guide_caller($page.url.searchParams)
+  $: return_target = data_guide_return(caller, project_id, task_id)
+  $: saved_guide_url = with_data_guide_caller(
+    `/generate/${project_id}/${task_id}/data_guide`,
+    caller,
+  )
   $: agentInfo.set({
     name: "Refine Data Guide",
     description: `Refine the saved task input data guide for project ${project_id}, task ${task_id}.`,
@@ -76,9 +90,7 @@
     if (!handoff) {
       // No seed (direct URL hit / hard refresh) — the saved-guide view is
       // where this flow starts.
-      goto(`/generate/${project_id}/${task_id}/data_guide`, {
-        replaceState: true,
-      })
+      goto(saved_guide_url, { replaceState: true })
       return
     }
     pending_data_guide_refine_handoff.set(null)
@@ -213,9 +225,7 @@
     // (guide already matches what's on the server, samples were just for
     // verification).
     saved = true
-    goto(`/generate/${project_id}/${task_id}/data_guide`, {
-      replaceState: true,
-    })
+    goto(saved_guide_url, { replaceState: true })
   }
 
   async function handle_save() {
@@ -245,9 +255,7 @@
       // Replace state so the user can't back-navigate into the now-stale
       // refine flow they just exited. /data_guide will refetch the saved
       // guide on its own.
-      goto(`/generate/${project_id}/${task_id}/data_guide`, {
-        replaceState: true,
-      })
+      goto(saved_guide_url, { replaceState: true })
     } catch (e) {
       error = createKilnError(e)
     } finally {
@@ -263,12 +271,12 @@
     sub_subtitle_link="https://docs.kiln.tech/docs/synthetic-data-generation"
     breadcrumbs={[
       {
-        label: "Synthetic Data Generation",
-        href: `/generate/${project_id}/${task_id}/synth`,
+        label: return_target.label,
+        href: return_target.view_href,
       },
       {
         label: "Data Guide",
-        href: `/generate/${project_id}/${task_id}/data_guide`,
+        href: saved_guide_url,
       },
     ]}
   >

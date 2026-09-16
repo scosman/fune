@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Task } from "$lib/types"
+  import type { Task, TurnMode } from "$lib/types"
   import Output from "$lib/ui/output.svelte"
   import FormElement from "$lib/utils/form_element.svelte"
   import FormList from "$lib/utils/form_list.svelte"
@@ -27,6 +27,9 @@
   // Simplify the create view for onboarding
   export let onboarding: boolean = false
 
+  // turn_mode is immutable after creation — backend rejects PATCHes.
+  export let read_only_turn_mode: boolean = false
+
   // @ts-expect-error This is a partial task, which is fine.
   export let task: Task = {
     name: "",
@@ -38,6 +41,9 @@
   $: creating = !task.id
   $: editing = !creating
   $: show_requirements = !onboarding && task.requirements.length > 0
+
+  let turn_mode: TurnMode = task.turn_mode ?? "single_turn"
+  $: is_multiturn = turn_mode === "multiturn"
 
   // These have their own custom VM, which is translated back to the model on save
   let outputSchemaSection: SchemaSection
@@ -130,12 +136,14 @@
         requirements: task.requirements,
         thinking_instruction: task.thinking_instruction,
       }
-      // Can only set schemas when creating a new task
       if (creating) {
-        body.input_json_schema =
-          inputSchemaSection.get_schema_string("input_schema")
-        body.output_json_schema =
-          outputSchemaSection.get_schema_string("output_schema")
+        body.turn_mode = turn_mode
+        if (!is_multiturn) {
+          body.input_json_schema =
+            inputSchemaSection?.get_schema_string("input_schema") ?? null
+          body.output_json_schema =
+            outputSchemaSection?.get_schema_string("output_schema") ?? null
+        }
       }
       const project_id = target_project_id
       if (!project_id) {
@@ -229,8 +237,8 @@
       !!task.instruction ||
       !!task.thinking_instruction ||
       has_edited_requirements ||
-      !!inputSchemaSection.get_schema_string("input_schema") ||
-      !!outputSchemaSection.get_schema_string("output_schema")
+      !!inputSchemaSection?.get_schema_string("input_schema") ||
+      !!outputSchemaSection?.get_schema_string("output_schema")
     )
   }
 
@@ -241,6 +249,22 @@
       ) {
         return
       }
+    }
+
+    // Multi-turn tasks are plain-text conversations (no input/output schema),
+    // so the example is a generic chat assistant rather than the structured
+    // joke generator used for single-turn.
+    if (is_multiturn) {
+      // @ts-expect-error This is a partial task, which is fine.
+      task = {
+        name: "Chat Assistant",
+        description: "An example multi-turn task from the KilnAI team.",
+        instruction:
+          "You are a helpful assistant. Have a natural back-and-forth conversation with the user: answer their questions clearly and concisely, ask for clarification when you need it, and use the context from earlier in the conversation.",
+        requirements: [],
+      }
+      turn_mode = "multiturn"
+      return
     }
 
     // @ts-expect-error This is a partial task, which is fine.
@@ -286,6 +310,7 @@
         additionalProperties: false,
       }),
     }
+    turn_mode = "single_turn"
   }
 
   function prompt_description() {
@@ -363,79 +388,149 @@
     {/if}
 
     <div class="text-sm font-medium text-left pt-6 flex flex-col gap-1">
-      <div class="text-xl font-bold">Part 2: Input Schema</div>
+      <div class="text-xl font-bold">Part 2: Task Type</div>
       <div class="text-xs text-gray-500">
-        What kind of input will the model receive?
+        Will the task be a single exchange, or a back-and-forth conversation?
       </div>
     </div>
 
-    <div>
-      {#if editing}
-        <div>
-          <div class="text-sm mb-2 flex flex-col gap-1">
-            <p>
-              You can't edit an existing task's input format, as existing
-              dataset items would not conform to the new schema.
-            </p>
-            <p>
-              You can
-              <a
-                class="link"
-                href="/settings/clone_task/{target_project_id}/{task.id}"
-                >clone this task</a
-              >
-              instead.
-            </p>
+    <div data-testid="turn-mode-section">
+      {#if read_only_turn_mode}
+        <div class="flex flex-col gap-1" data-testid="turn-mode-readonly">
+          <div class="text-sm">
+            <span class="font-medium">Task type:</span>
+            <span>{is_multiturn ? "Multi-turn" : "Single-turn"}</span>
           </div>
-          <Output
-            raw_output={task.input_json_schema || "Input Format: Plain text"}
-          />
+          <div class="text-xs text-gray-500">
+            This setting can't be changed after the task is created.
+          </div>
         </div>
       {:else}
-        <SchemaSection
-          bind:this={inputSchemaSection}
-          bind:schema_string={task.input_json_schema}
-        />
+        <div
+          class="flex flex-col gap-2"
+          data-testid="turn-mode-editable"
+          role="radiogroup"
+          aria-label="Task type"
+        >
+          <div class="form-control">
+            <label class="label cursor-pointer flex flex-row gap-3 py-1">
+              <input
+                type="radio"
+                name="radio-turn-mode"
+                class="radio"
+                data-testid="turn-mode-single-turn"
+                value="single_turn"
+                bind:group={turn_mode}
+              />
+              <div class="flex flex-col grow text-left">
+                <span class="label-text">Single-turn</span>
+                <span class="text-xs text-gray-500">
+                  A single user message and one assistant response.
+                </span>
+              </div>
+            </label>
+          </div>
+          <div class="form-control">
+            <label class="label cursor-pointer flex flex-row gap-3 py-1">
+              <input
+                type="radio"
+                name="radio-turn-mode"
+                class="radio"
+                data-testid="turn-mode-multiturn"
+                value="multiturn"
+                bind:group={turn_mode}
+              />
+              <div class="flex flex-col grow text-left">
+                <span class="label-text">Multi-turn</span>
+                <span class="text-xs text-gray-500">
+                  A back-and-forth conversation with multiple turns.
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
       {/if}
     </div>
 
-    <div class="text-sm font-medium text-left pt-6 flex flex-col gap-1">
-      <div class="text-xl font-bold">Part 3: Output Schema</div>
-      <div class="text-xs text-gray-500">
-        What kind of output will the model produce?
+    <!-- Multi-turn tasks are plain-text conversations with no input/output
+         schema, so these sections are hidden entirely for them. -->
+    {#if !is_multiturn}
+      <div class="text-sm font-medium text-left pt-6 flex flex-col gap-1">
+        <div class="text-xl font-bold">Part 3: Input Schema</div>
+        <div class="text-xs text-gray-500">
+          What kind of input will the model receive?
+        </div>
       </div>
-    </div>
 
-    <div>
-      {#if editing}
-        <div>
-          <div class="text-sm mb-2 flex flex-col gap-1">
-            <p>
-              You can't edit an existing task's output format, as existing
-              dataset items would not conform to the new schema.
-            </p>
-            <p>
-              You can
-              <a
-                class="link"
-                href="/settings/clone_task/{target_project_id}/{task.id}"
-                >clone this task</a
-              >
-              instead.
-            </p>
+      <div>
+        {#if editing}
+          <div>
+            <div class="text-sm mb-2 flex flex-col gap-1">
+              <p>
+                You can't edit an existing task's input format, as existing
+                dataset items would not conform to the new schema.
+              </p>
+              <p>
+                You can
+                <a
+                  class="link"
+                  href="/settings/clone_task/{target_project_id}/{task.id}"
+                  >clone this task</a
+                >
+                instead.
+              </p>
+            </div>
+            <Output
+              raw_output={task.input_json_schema || "Input Format: Plain text"}
+            />
           </div>
-          <Output
-            raw_output={task.output_json_schema || "Output Format: Plain text"}
+        {:else}
+          <SchemaSection
+            bind:this={inputSchemaSection}
+            bind:schema_string={task.input_json_schema}
           />
+        {/if}
+      </div>
+
+      <div class="text-sm font-medium text-left pt-6 flex flex-col gap-1">
+        <div class="text-xl font-bold">Part 4: Output Schema</div>
+        <div class="text-xs text-gray-500">
+          What kind of output will the model produce?
         </div>
-      {:else}
-        <SchemaSection
-          bind:this={outputSchemaSection}
-          bind:schema_string={task.output_json_schema}
-          warn_about_required={true}
-        />
-      {/if}
-    </div>
+      </div>
+
+      <div>
+        {#if editing}
+          <div>
+            <div class="text-sm mb-2 flex flex-col gap-1">
+              <p>
+                You can't edit an existing task's output format, as existing
+                dataset items would not conform to the new schema.
+              </p>
+              <p>
+                You can
+                <a
+                  class="link"
+                  href="/settings/clone_task/{target_project_id}/{task.id}"
+                  >clone this task</a
+                >
+                instead.
+              </p>
+            </div>
+            <Output
+              raw_output={task.output_json_schema ||
+                "Output Format: Plain text"}
+            />
+          </div>
+        {:else}
+          <SchemaSection
+            bind:this={outputSchemaSection}
+            bind:schema_string={task.output_json_schema}
+            warn_about_required={true}
+          />
+        {/if}
+      </div>
+    {/if}
 
     {#if show_requirements}
       <div class="pt-6">
@@ -443,7 +538,7 @@
           <div class="text-sm font-medium text-left flex flex-col gap-1">
             <div class="flex flex-row gap-2 items-center">
               <div class="text-xl font-bold" id="requirements_part">
-                Part 4: Requirements
+                Part 5: Requirements
               </div>
               <div class="badge badge-sm badge-outline">Deprecated</div>
             </div>

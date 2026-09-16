@@ -21,6 +21,7 @@ from kiln_ai.datamodel.basemodel import (
     name_validator,
     string_to_valid_name,
 )
+from kiln_ai.datamodel.datamodel_enums import TurnMode
 from kiln_ai.datamodel.model_cache import ModelCache
 from kiln_ai.datamodel.run_config import KilnAgentRunConfigProperties
 
@@ -1264,6 +1265,7 @@ def test_task_run_children_only_under_task_path_with_parent_task_run_id(tmp_path
         name="Test Task",
         instruction="Test instruction",
         path=tmp_path / "task.kiln",
+        turn_mode=TurnMode.multiturn,
     )
     task.save_to_file()
 

@@ -182,3 +182,6 @@ class RefineSpecApiOutput(BaseModel):
 
     new_proposed_spec_edits: list[NewProposedSpecEditApi]
     not_incorporated_feedback: str | None
+    # Model-suggested, filename-safe name for the eval, derived from the issue.
+    # Absent when the model doesn't provide one.
+    suggested_name: str | None = None

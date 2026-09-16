@@ -16,7 +16,7 @@ from kiln_ai.datamodel import (
     TaskRun,
 )
 from kiln_ai.datamodel.basemodel import generate_model_id, name_validator
-from kiln_ai.datamodel.datamodel_enums import ChatStrategy
+from kiln_ai.datamodel.datamodel_enums import ChatStrategy, TurnMode
 from kiln_ai.datamodel.test_json_schema import json_joke_schema
 
 
@@ -813,7 +813,9 @@ def task(tmp_path):
     project_path = tmp_path / "project.kiln"
     project = Project(name="P", path=project_path)
     project.save_to_file()
-    task = Task(name="T", instruction="Do it", parent=project)
+    task = Task(
+        name="T", instruction="Do it", parent=project, turn_mode=TurnMode.multiturn
+    )
     task.save_to_file()
     return task
 
@@ -929,7 +931,7 @@ def test_find_nested_task_run_by_parent_task_run_id(task: Task):
     loaded_task = Task.load_from_file(task.path)
     found = next(
         r
-        for r in loaded_task.runs()
+        for r in loaded_task.runs(include_intermediate_runs=True)
         if r.id == target_id and r.parent_task_run_id == parent_run.id
     )
     assert found is not None
@@ -945,7 +947,9 @@ def test_find_root_task_run_by_id_given_task(task: Task):
 
     assert task.path is not None
     loaded_task = Task.load_from_file(task.path)
-    found = next(r for r in loaded_task.runs() if r.id == target_id)
+    found = next(
+        r for r in loaded_task.runs(include_intermediate_runs=True) if r.id == target_id
+    )
     assert found is not None
     assert found.id == target_id
     assert found.input == "in"
@@ -1023,7 +1027,12 @@ def test_comprehensive_flat_task_run_hierarchy(tmp_path):
     project_path = tmp_path / "project.kiln"
     project = Project(name="Test Project", path=project_path)
     project.save_to_file()
-    task = Task(name="Test Task", instruction="Test instruction", parent=project)
+    task = Task(
+        name="Test Task",
+        instruction="Test instruction",
+        parent=project,
+        turn_mode=TurnMode.multiturn,
+    )
     task.save_to_file()
 
     output = TaskOutput(output="test output")
@@ -1126,7 +1135,7 @@ def test_task_run_wrong_parent_type_raises(tmp_path):
 def test_task_run_runs_on_disk(tmp_path):
     project = Project(name="proj", path=tmp_path / "project.kiln")
     project.save_to_file()
-    task = Task(name="t", instruction="i", parent=project)
+    task = Task(name="t", instruction="i", parent=project, turn_mode=TurnMode.multiturn)
     task.save_to_file()
 
     parent_run = TaskRun(

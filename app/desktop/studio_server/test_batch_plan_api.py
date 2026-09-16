@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from kiln_ai.datamodel import Project, Task
+from kiln_ai.synthetic_user.runner import NUM_CASES_MAX
 from kiln_server.custom_errors import connect_custom_errors
 
 from app.desktop.studio_server.api_client.kiln_ai_server_client.models import (
@@ -137,6 +138,41 @@ def test_batch_plan_sends_task_context_from_server(
     assert sent.input_data_guide == "guide text"
     assert sent.task_input_schema is None
     assert sent.task_output_schema == test_task.output_json_schema
+
+
+def test_batch_plan_accepts_count_at_the_cap(
+    mock_copilot_key, mock_task_from_id, client
+):
+    """The cap is inclusive — a full-size batch plan is a valid request. Pairs
+    with the over-cap test to pin both sides of the bound."""
+    proxied = BatchPlanOutputClient(prompts=["x"], summary="s")
+    post = AsyncMock(return_value=_ok_response())
+    with (
+        patch("app.desktop.studio_server.batch_plan_api.get_authenticated_client"),
+        patch(
+            "app.desktop.studio_server.batch_plan_api.batch_plan_v1_copilot_batch_plan_post.asyncio_detailed",
+            new=post,
+        ),
+        patch(
+            "app.desktop.studio_server.batch_plan_api.unwrap_response",
+            return_value=proxied,
+        ),
+    ):
+        resp = client.post(
+            "/api/projects/proj-ID/tasks/task-ID/copilot/batch_plan",
+            json={"guidance": "g", "count": NUM_CASES_MAX},
+        )
+    assert resp.status_code == 200, resp.text
+    assert post.call_args.kwargs["body"].count == NUM_CASES_MAX
+
+
+def test_batch_plan_rejects_count_over_the_cap(mock_task_from_id, client):
+    """Over-cap counts are rejected by validation, before any upstream call."""
+    resp = client.post(
+        "/api/projects/proj-ID/tasks/task-ID/copilot/batch_plan",
+        json={"guidance": "g", "count": NUM_CASES_MAX + 1},
+    )
+    assert resp.status_code == 422
 
 
 def test_batch_plan_unknown_response_is_500(

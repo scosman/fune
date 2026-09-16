@@ -16,6 +16,7 @@ from kiln_ai.datamodel.datamodel_enums import (
     Priority,
     StructuredOutputMode,
     TaskOutputRatingType,
+    TurnMode,
 )
 from kiln_ai.datamodel.dataset_split import DatasetSplit
 from kiln_ai.datamodel.eval import Eval, EvalInput
@@ -178,6 +179,27 @@ class Task(
         description="ID of the run config to use for this task by default. Must exist in saved run configs for this task.",
     )
 
+    turn_mode: TurnMode = Field(
+        default=TurnMode.single_turn,
+        frozen=True,
+        description="Whether this task is single-turn (each run independent) or multi-turn (runs continue prior runs). Immutable after construction: changing it would invalidate existing TaskRuns. To change, clone the task.",
+    )
+
+    @model_validator(mode="after")
+    def validate_turn_mode_compatibility(self) -> "Task":
+        if self.turn_mode == TurnMode.multiturn:
+            if self.input_json_schema is not None:
+                raise ValueError(
+                    "Multi-turn tasks cannot have a structured input schema. "
+                    "Use plaintext input for multi-turn tasks."
+                )
+            if self.output_json_schema is not None:
+                raise ValueError(
+                    "Multi-turn tasks do not support structured output yet. "
+                    "Use plaintext output, or set turn_mode to single_turn."
+                )
+        return self
+
     def output_schema(self) -> Dict | None:
         if self.output_json_schema is None:
             return None
@@ -225,11 +247,14 @@ class Task(
         copy every run regardless.
         """
         runs = self._runs(readonly=readonly)  # type: ignore[attr-defined]
+        # Eval filter first: an excluded eval-generated run must not count as a parent
+        # either, or an eval child chained onto a dataset run would hide that dataset
+        # run from the default view while itself being filtered out.
+        if not include_eval_generated:
+            runs = [r for r in runs if r.eval_source is None]
         if not include_intermediate_runs:
             parent_ids = {r.parent_task_run_id for r in runs if r.parent_task_run_id}
             runs = [r for r in runs if r.id not in parent_ids]
-        if not include_eval_generated:
-            runs = [r for r in runs if r.eval_source is None]
         return runs
 
     # These wrappers help for typechecking. We should fix this in KilnParentModel

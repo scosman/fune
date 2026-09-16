@@ -1,6 +1,7 @@
 import { writable, get } from "svelte/store"
 import { client } from "$lib/api_client"
 import type { KilnAgentRunConfigProperties } from "$lib/types"
+import type { DataGuideCaller } from "$lib/utils/data_guide_return"
 
 // Per-task tracking for the Data Guide draft job. The draft runs as a
 // kiln_server background job (see copilot_api.py); the user can leave the page
@@ -35,6 +36,10 @@ export type DataGuideJobRecord = {
   // Needed to generate preview inputs once the draft is ready, even after a
   // hard refresh that loses the in-memory run config.
   run_config_properties: KilnAgentRunConfigProperties
+  // Which page opened the setup chain the job was started from, so the
+  // progress widget's link returns there once the draft is reviewed.
+  // Records written before this field existed read as no caller.
+  caller?: DataGuideCaller | null
   // ISO timestamp string, set by the caller (Date.now is fine in the browser).
   created_at: string
   // The user dismissed the task-wide progress indicator for this job (closed

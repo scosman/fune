@@ -1,0 +1,9 @@
+{
+  "method": "post",
+  "path": "/api/projects/{project_id}/tasks/{task_id}/eval_builder/single_turn_pipeline",
+  "agent_policy": {
+    "permission": "allow",
+    "requires_approval": true,
+    "approval_description": "Run the task once per generated input and judge each result? Invokes the target model (tools live) and the judge (cost)."
+  }
+}

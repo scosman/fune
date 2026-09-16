@@ -451,7 +451,7 @@
         <Warning
           warning_message="The extraction output cannot be displayed in full because it is too long. To view the full output, please download the document."
           warning_color="warning"
-          tight={true}
+          inline={true}
           large_icon={false}
           warning_icon="exclaim"
         />

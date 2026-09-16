@@ -8,9 +8,9 @@ The prompt_template is rendered with Jinja2 using the EvalTaskInput fields
 as the template namespace.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from jinja2 import UndefinedError
+from jinja2 import UndefinedError, meta
 
 from kiln_ai.adapters.adapter_registry import adapter_for_task
 from kiln_ai.adapters.eval.base_eval import (
@@ -55,6 +55,17 @@ _DEFAULT_SYSTEM_PROMPT = (
     "Your job is to evaluate a model's performance on a task. "
     "Score the output according to the criteria provided."
 )
+
+
+def _unknown_template_variables(template: str, namespace: dict[str, Any]) -> set[str]:
+    """Top-level variables the template uses that aren't EvalTaskInput fields.
+
+    Distinguishes a template-authoring bug (typo'd variable name) from
+    genuinely missing data (e.g. an absent reference_data key) when rendering
+    raises UndefinedError.
+    """
+    ast = _template_env.parse(template)
+    return meta.find_undeclared_variables(ast) - set(namespace)
 
 
 class _LlmJudgeTask(Task, parent_of={}):
@@ -141,6 +152,17 @@ class LlmJudgeEval(BaseV2EvalBridge):
                 skipped_detail=f"Template rendering failed: {e}",
             )
         except UndefinedError as e:
+            # A typo'd template variable and genuinely missing reference data
+            # both raise UndefinedError; only the latter is a data problem.
+            unknown = _unknown_template_variables(props.prompt_template, namespace)
+            if unknown:
+                return V2EvalResult(
+                    skipped_reason=SkippedReason.extraction_failed,
+                    skipped_detail=(
+                        "Template references unknown variable(s): "
+                        + ", ".join(sorted(unknown))
+                    ),
+                )
             return V2EvalResult(
                 skipped_reason=SkippedReason.missing_reference_key,
                 skipped_detail=f"Template references missing data: {e}",
@@ -162,7 +184,18 @@ class LlmJudgeEval(BaseV2EvalBridge):
 
         if props.g_eval:
             model_provider = built_in_models_from_provider(provider, model_name)
-            if model_provider is not None and not model_provider.supports_logprobs:
+            if model_provider is None:
+                # Fail before spending on the judge call: without a built-in
+                # entry, logprobs support can't be verified and the call would
+                # fail deterministically anyway.
+                raise ValueError(
+                    f"g_eval=True requires logprobs support, but model "
+                    f"'{model_name}' is not a built-in model for provider "
+                    f"'{props.model_provider}', so logprobs support can't be "
+                    f"verified. Use a built-in model that supports logprobs, "
+                    f"or disable G-Eval for this judge."
+                )
+            if not model_provider.supports_logprobs:
                 raise ValueError(
                     f"g_eval=True requires logprobs support, but provider "
                     f"'{props.model_provider}' for model '{model_name}' does not "

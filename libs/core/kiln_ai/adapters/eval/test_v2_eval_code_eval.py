@@ -296,6 +296,35 @@ class TestScoreValidation:
             with pytest.raises(RuntimeError, match="must be a float"):
                 await adapter.evaluate(_inp())
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
+    )
+    async def test_non_finite_score_rejected(self, bad):
+        """Non-finite scores must fail in the scorer's error surface, not at EvalRun
+        save time (pydantic serializes NaN as null, so the saved file won't load)."""
+        cfg = _make_config()
+        adapter = CodeEvalAdapter(cfg)
+        with patch(_BRIDGE_PATH, new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = BridgeResult(
+                result_msg={"type": "result", "ok": {"accuracy": bad}}
+            )
+            with pytest.raises(RuntimeError, match="must be a finite number"):
+                await adapter.evaluate(_inp())
+
+    @pytest.mark.asyncio
+    async def test_overlarge_int_rejected_cleanly(self):
+        """An int too large for float (10**400) must surface the finite-score
+        RuntimeError, not a raw OverflowError from the coercion."""
+        cfg = _make_config()
+        adapter = CodeEvalAdapter(cfg)
+        with patch(_BRIDGE_PATH, new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = BridgeResult(
+                result_msg={"type": "result", "ok": {"accuracy": 10**400}}
+            )
+            with pytest.raises(RuntimeError, match="must be a finite number"):
+                await adapter.evaluate(_inp())
+
     def test_no_parent_eval_raises(self):
         cfg = _make_config()
         cfg.parent_eval.return_value = None

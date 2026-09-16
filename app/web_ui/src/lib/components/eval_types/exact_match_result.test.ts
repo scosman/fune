@@ -29,9 +29,9 @@ describe("ExactMatchResult", () => {
 
   it("delegates score display to EvalResultScores with toFixed(2)", () => {
     const { container } = render(ExactMatchResult, {
-      props: { scores: { match: 1 } },
+      props: { scores: { correct: 1 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("correct:")
     expect(container.textContent).toContain("1.00")
   })
 
@@ -52,17 +52,17 @@ describe("ExactMatchResult", () => {
     expect(container.textContent).toContain("No scores available.")
   })
 
-  it("shows Pass badge when match score is 1.0", () => {
+  it("shows Pass badge when the score is 1.0", () => {
     const { container } = render(ExactMatchResult, {
-      props: { scores: { match: 1.0 }, eval_config: makeConfig() },
+      props: { scores: { correct: 1.0 }, eval_config: makeConfig() },
     })
     expect(container.textContent).toContain("Pass")
     expect(container.querySelector(".badge-success")).toBeTruthy()
   })
 
-  it("shows Fail badge when match score is 0.0", () => {
+  it("shows Fail badge when the score is 0.0", () => {
     const { container } = render(ExactMatchResult, {
-      props: { scores: { match: 0.0 }, eval_config: makeConfig() },
+      props: { scores: { correct: 0.0 }, eval_config: makeConfig() },
     })
     expect(container.textContent).toContain("Fail")
     expect(container.querySelector(".badge-error")).toBeTruthy()
@@ -71,7 +71,7 @@ describe("ExactMatchResult", () => {
   it("does not show pass/fail badge when skipped", () => {
     const { container } = render(ExactMatchResult, {
       props: {
-        scores: { match: 0.0 },
+        scores: { correct: 0.0 },
         skipped_reason: "missing_reference",
         eval_config: makeConfig(),
       },
@@ -83,7 +83,7 @@ describe("ExactMatchResult", () => {
   it("shows expected_value from config", () => {
     const { container } = render(ExactMatchResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { correct: 1.0 },
         eval_config: makeConfig({ expected_value: "world" }),
       },
     })
@@ -94,7 +94,7 @@ describe("ExactMatchResult", () => {
   it("shows reference_key when no expected_value", () => {
     const { container } = render(ExactMatchResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { correct: 1.0 },
         eval_config: makeConfig({
           expected_value: null,
           reference_key: "answer",
@@ -108,7 +108,7 @@ describe("ExactMatchResult", () => {
   it("shows case insensitive label", () => {
     const { container } = render(ExactMatchResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { correct: 1.0 },
         eval_config: makeConfig({ case_sensitive: false }),
       },
     })
@@ -118,7 +118,7 @@ describe("ExactMatchResult", () => {
   it("does not show case insensitive label when case_sensitive is true", () => {
     const { container } = render(ExactMatchResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { correct: 1.0 },
         eval_config: makeConfig({ case_sensitive: true }),
       },
     })
@@ -128,7 +128,7 @@ describe("ExactMatchResult", () => {
   it("shows value_expression from config", () => {
     const { container } = render(ExactMatchResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { correct: 1.0 },
         eval_config: makeConfig({ value_expression: "$.result" }),
       },
     })

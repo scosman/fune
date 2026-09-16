@@ -11,9 +11,14 @@ from litellm.types.utils import ModelResponseStream
 from kiln_ai.adapters.chat.chat_formatter import (
     ChatFormatter,
     MultiturnFormatter,
+    chat_strategy_for_run,
     get_chat_formatter,
 )
-from kiln_ai.adapters.errors import KilnRunError, format_error_message
+from kiln_ai.adapters.errors import (
+    KilnRunError,
+    StructuredOutputParseError,
+    format_error_message,
+)
 from kiln_ai.adapters.ml_model_list import (
     KilnModelProvider,
     StructuredOutputMode,
@@ -45,7 +50,7 @@ from kiln_ai.datamodel import (
     TaskRun,
     Usage,
 )
-from kiln_ai.datamodel.datamodel_enums import ChatStrategy, InputType
+from kiln_ai.datamodel.datamodel_enums import InputType
 from kiln_ai.datamodel.json_schema import validate_schema_with_value_error
 from kiln_ai.datamodel.run_config import (
     KilnAgentRunConfigProperties,
@@ -53,6 +58,7 @@ from kiln_ai.datamodel.run_config import (
 )
 from kiln_ai.datamodel.skill import Skill
 from kiln_ai.datamodel.task import RunConfigProperties
+from kiln_ai.datamodel.task_output import TASK_OUTPUT_SCHEMA_ERROR_PREFIX
 from kiln_ai.datamodel.tool_id import SKILL_TOOL_ID_PREFIX, skill_id_from_tool_id
 from kiln_ai.tools import KilnToolInterface
 from kiln_ai.tools.mcp_session_manager import mcp_session_scope
@@ -127,14 +133,6 @@ class AdapterConfig:
     requests. This is a cost optimization and does not affect model output.
     """
     automatic_prompt_caching: bool = False
-
-    """
-    When True, thinking instructions from the prompt builder are forwarded
-    into the user message for reasoning models instead of being silently
-    dropped. This is useful for eval runs that need to replicate the exact
-    prompt seen during task execution.
-    """
-    forward_thinking_instructions: bool = False
 
 
 class BaseAdapter(metaclass=ABCMeta):
@@ -275,16 +273,26 @@ class BaseAdapter(metaclass=ABCMeta):
                 if self.output_schema is not None:
                     # Parse json to dict if we have structured output
                     if isinstance(parsed_output.output, str):
-                        parsed_output.output = parse_json_string(parsed_output.output)
+                        try:
+                            parsed_output.output = parse_json_string(
+                                parsed_output.output
+                            )
+                        except ValueError as e:
+                            # Re-type (message unchanged) so retries treat bad
+                            # JSON like a schema mismatch: a one-off model slip.
+                            raise StructuredOutputParseError(str(e)) from e
 
                     if not isinstance(parsed_output.output, dict):
-                        raise RuntimeError(
+                        # Valid JSON of the wrong shape (often the object wrapped
+                        # in a list) is the same one-off model slip as bad JSON,
+                        # so it carries the retryable type too.
+                        raise StructuredOutputParseError(
                             f"structured response is not a dict: {parsed_output.output}"
                         )
                     validate_schema_with_value_error(
                         parsed_output.output,
                         self.output_schema,
-                        "This task requires a specific output schema. While the model produced JSON, that JSON didn't meet the schema. Search 'Troubleshooting Structured Data Issues' in our docs for more information.",
+                        TASK_OUTPUT_SCHEMA_ERROR_PREFIX,
                     )
                 else:
                     if not isinstance(parsed_output.output, str):
@@ -459,15 +467,23 @@ class BaseAdapter(metaclass=ABCMeta):
 
             if self.output_schema is not None:
                 if isinstance(parsed_output.output, str):
-                    parsed_output.output = parse_json_string(parsed_output.output)
+                    try:
+                        parsed_output.output = parse_json_string(parsed_output.output)
+                    except ValueError as e:
+                        # Re-type (message unchanged) so retries treat bad JSON
+                        # like a schema mismatch: a one-off model slip.
+                        raise StructuredOutputParseError(str(e)) from e
                 if not isinstance(parsed_output.output, dict):
-                    raise RuntimeError(
+                    # Valid JSON of the wrong shape (often the object wrapped in
+                    # a list) is the same one-off model slip as bad JSON, so it
+                    # carries the retryable type too.
+                    raise StructuredOutputParseError(
                         f"structured response is not a dict: {parsed_output.output}"
                     )
                 validate_schema_with_value_error(
                     parsed_output.output,
                     self.output_schema,
-                    "This task requires a specific output schema. While the model produced JSON, that JSON didn't meet the schema. Search 'Troubleshooting Structured Data Issues' in our docs for more information.",
+                    TASK_OUTPUT_SCHEMA_ERROR_PREFIX,
                 )
             else:
                 if not isinstance(parsed_output.output, str):
@@ -654,47 +670,21 @@ class BaseAdapter(metaclass=ABCMeta):
         cot_prompt = self.prompt_builder.chain_of_thought_prompt()
         system_message = self.build_prompt()
 
-        # If no COT prompt, use the single turn strategy. Even when a tuned strategy is set, as the tuned strategy is either already single turn, or won't work without a COT prompt.
-        if not cot_prompt:
-            return get_chat_formatter(
-                strategy=ChatStrategy.single_turn,
-                system_message=system_message,
-                user_input=input,
-            )
-
-        # Some models like finetunes are trained with a specific chat strategy. Use that.
-        # However, don't use that if it is single turn. The user selected a COT prompt, and we give explicit prompt selection priority over the tuned strategy.
-        tuned_chat_strategy = self.model_provider().tuned_chat_strategy
-        if tuned_chat_strategy and tuned_chat_strategy != ChatStrategy.single_turn:
-            return get_chat_formatter(
-                strategy=tuned_chat_strategy,
-                system_message=system_message,
-                user_input=input,
-                thinking_instructions=cot_prompt,
-            )
-
-        # Pick the best chat strategy for the model given it has a cot prompt.
-        reasoning_capable = self.model_provider().reasoning_capable
-        if reasoning_capable:
-            # "Thinking" LLM designed to output thinking in a structured format. We'll use its native format.
-            # A simple message with the COT prompt appended to the message list is sufficient
-            return get_chat_formatter(
-                strategy=ChatStrategy.single_turn_r1_thinking,
-                system_message=system_message,
-                user_input=input,
-                thinking_instructions=cot_prompt,
-                forward_thinking_instructions=self.base_adapter_config.forward_thinking_instructions,
-            )
-        else:
-            # Unstructured output with COT
-            # Two calls to separate the thinking from the final response
-            return get_chat_formatter(
-                strategy=ChatStrategy.two_message_cot,
-                system_message=system_message,
-                user_input=input,
-                thinking_instructions=cot_prompt,
-                forward_thinking_instructions=self.base_adapter_config.forward_thinking_instructions,
-            )
+        # The model only enters the decision once a COT prompt is in play, so keep the
+        # provider lookup lazy: a plain prompt is single turn whatever the model is, and
+        # resolving a provider can fail.
+        provider = self.model_provider() if cot_prompt else None
+        strategy = chat_strategy_for_run(
+            cot_prompt=cot_prompt,
+            tuned_chat_strategy=provider.tuned_chat_strategy if provider else None,
+            reasoning_capable=provider.reasoning_capable if provider else False,
+        )
+        return get_chat_formatter(
+            strategy=strategy,
+            system_message=system_message,
+            user_input=input,
+            thinking_instructions=cot_prompt,
+        )
 
     # create a run and task output
     def generate_run(

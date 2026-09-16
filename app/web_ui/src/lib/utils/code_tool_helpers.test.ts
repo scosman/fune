@@ -8,6 +8,7 @@ import {
   generateExamples,
   formatParamPreview,
   plainTextParamsSchema,
+  resolveStep2Code,
 } from "./code_tool_helpers"
 
 describe("extractParams", () => {
@@ -202,28 +203,83 @@ describe("generateCodeToolPlaceholder", () => {
     expect(result).toContain("def run(ids: list[int]) -> str:")
   })
 
-  it("escapes triple quotes in description", () => {
-    const schema = { type: "object", properties: {} }
-    const result = generateCodeToolPlaceholder(schema, 'has """quotes"""')
-    expect(result).not.toContain('"""has """')
-    expect(result).toContain("has ''quotes''")
-  })
-
-  it("escapes Python reserved words in parameter names", () => {
+  // The sandbox invokes run() with keyword arguments keyed by the schema's exact
+  // property names, so the stub must never rename them. Reserved-word names are
+  // rejected by CodeTool validation server-side, not rewritten here.
+  it("uses schema property names verbatim, without renaming", () => {
     const schema = {
       type: "object",
       properties: {
-        def: { type: "string" },
-        return: { type: "integer" },
+        match: { type: "string" },
+        type: { type: "integer" },
       },
-      required: ["def"],
+      required: ["match"],
     }
     const result = generateCodeToolPlaceholder(schema, "test")
-    expect(result).toContain("def_param: str")
-    expect(result).toContain("return_param: int | None = None")
-    expect(result).not.toMatch(/\(def:/)
-    expect(result).not.toMatch(/, return:/)
+    expect(result).toContain(
+      "def run(match: str, type: int | None = None) -> str:",
+    )
   })
+
+  // Each case asserts the exact stub so the docstring stays a valid Python string
+  // for any description (verified against compile() when this table was built).
+  const docstringCases: { name: string; desc: string; escaped: string }[] = [
+    {
+      name: "embedded triple quotes",
+      desc: 'has """quotes"""',
+      escaped: 'has \\"\\"\\"quotes\\"\\"\\"',
+    },
+    {
+      name: "trailing double quote",
+      desc: 'ends with "',
+      escaped: 'ends with \\"',
+    },
+    {
+      name: "trailing backslash",
+      desc: "ends with \\",
+      escaped: "ends with \\\\",
+    },
+    {
+      name: "backslash followed by triple quote",
+      desc: '\\"""',
+      escaped: '\\\\\\"\\"\\"',
+    },
+    {
+      name: "lone double quote",
+      desc: '"',
+      escaped: '\\"',
+    },
+    {
+      name: "lone backslash",
+      desc: "\\",
+      escaped: "\\\\",
+    },
+    {
+      name: "escaped-looking quote sequence",
+      desc: 'mix \\" of \\\\ and """ end "',
+      escaped: 'mix \\\\\\" of \\\\\\\\ and \\"\\"\\" end \\"',
+    },
+    {
+      name: "multiline description",
+      desc: "line one\nline two",
+      escaped: "line one\nline two",
+    },
+    {
+      name: "empty description",
+      desc: "",
+      escaped: "",
+    },
+  ]
+
+  for (const { name, desc, escaped } of docstringCases) {
+    it(`escapes docstring safely: ${name}`, () => {
+      const schema = { type: "object", properties: {} }
+      const result = generateCodeToolPlaceholder(schema, desc)
+      expect(result).toBe(
+        `def run() -> str:\n    """${escaped}"""\n    # Your code here\n    return "result"\n`,
+      )
+    })
+  }
 
   it("handles deeply nested array/object types", () => {
     const schema = {
@@ -301,6 +357,112 @@ describe("isCodeUnmodified", () => {
     const placeholder = 'def run() -> str:\n    """test"""\n    pass\n'
     const with_import = generateImportHelper("get_user") + placeholder
     expect(isCodeUnmodified(with_import, placeholder)).toBe(false)
+  })
+})
+
+describe("resolveStep2Code", () => {
+  const placeholderA = 'def run() -> str:\n    """A"""\n    return "result"\n'
+  const placeholderB =
+    'def run(x: str) -> str:\n    """B"""\n    return "result"\n'
+
+  it("first visit with no clone seeds the fresh placeholder", () => {
+    const result = resolveStep2Code({
+      code: "",
+      newPlaceholder: placeholderA,
+      generatedPlaceholder: "",
+      schemaChangedHint: false,
+      cloneCode: null,
+    })
+    expect(result).toEqual({
+      code: placeholderA,
+      generatedPlaceholder: placeholderA,
+      schemaChangedHint: false,
+      cloneConsumed: false,
+    })
+  })
+
+  it("first visit with a clone seeds the clone code and marks it consumed", () => {
+    const cloneCode = "def run():\n    return 'cloned'\n"
+    const result = resolveStep2Code({
+      code: "",
+      newPlaceholder: placeholderA,
+      generatedPlaceholder: "",
+      schemaChangedHint: false,
+      cloneCode,
+    })
+    expect(result).toEqual({
+      code: cloneCode,
+      generatedPlaceholder: placeholderA,
+      schemaChangedHint: false,
+      cloneConsumed: true,
+    })
+  })
+
+  it("regenerates an untouched placeholder after a schema change", () => {
+    const result = resolveStep2Code({
+      code: placeholderA,
+      newPlaceholder: placeholderB,
+      generatedPlaceholder: placeholderA,
+      schemaChangedHint: false,
+      cloneCode: null,
+    })
+    expect(result).toEqual({
+      code: placeholderB,
+      generatedPlaceholder: placeholderB,
+      schemaChangedHint: false,
+      cloneConsumed: false,
+    })
+  })
+
+  // The regression this guards: returning to the Code step (browser Back makes
+  // the wizard read as a first visit) must not overwrite authored code.
+  it("preserves user-authored code and flags the schema change", () => {
+    const userCode = placeholderA + "\n# my real implementation\n"
+    const result = resolveStep2Code({
+      code: userCode,
+      newPlaceholder: placeholderB,
+      generatedPlaceholder: placeholderA,
+      schemaChangedHint: false,
+      cloneCode: null,
+    })
+    expect(result).toEqual({
+      code: userCode,
+      generatedPlaceholder: placeholderB,
+      schemaChangedHint: true,
+      cloneConsumed: false,
+    })
+  })
+
+  it("leaves user-authored code untouched when the schema is unchanged", () => {
+    const userCode = placeholderA + "\n# my real implementation\n"
+    const result = resolveStep2Code({
+      code: userCode,
+      newPlaceholder: placeholderA,
+      generatedPlaceholder: placeholderA,
+      schemaChangedHint: true,
+      cloneCode: null,
+    })
+    expect(result).toEqual({
+      code: userCode,
+      generatedPlaceholder: placeholderA,
+      schemaChangedHint: true,
+      cloneConsumed: false,
+    })
+  })
+
+  it("does not re-seed from the clone once the user has code", () => {
+    const userCode = "def run():\n    return 'edited'\n"
+    const result = resolveStep2Code({
+      code: userCode,
+      newPlaceholder: placeholderB,
+      generatedPlaceholder: placeholderA,
+      schemaChangedHint: false,
+      // A stale clone that was already consumed would still be passed as null
+      // by the caller; even if present, existing code wins.
+      cloneCode: "def run():\n    return 'cloned'\n",
+    })
+    expect(result.code).toBe(userCode)
+    expect(result.cloneConsumed).toBe(false)
   })
 })
 

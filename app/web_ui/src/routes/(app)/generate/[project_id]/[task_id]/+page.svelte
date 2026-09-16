@@ -9,11 +9,18 @@
   import { DEFAULT_QNA_GUIDANCE } from "./qna/guidance"
   import { agentInfo } from "$lib/agent"
   import { client } from "$lib/api_client"
+  import { load_task } from "$lib/stores"
+  import type { Task } from "$lib/types"
+  import { KilnError, createKilnError } from "$lib/utils/error_handlers"
+  import Warning from "$lib/ui/warning.svelte"
 
   // watch out because query param value is not the same as gen_type
   type SynthReasonQueryParam = "eval" | "fine_tune" | "qna"
 
   let loading = true
+  let load_error: KilnError | null = null
+  let task: Task | null = null
+  $: is_multiturn = task?.turn_mode === "multiturn"
   $: project_id = $page.params.project_id!
   $: task_id = $page.params.task_id!
   $: agentInfo.set({
@@ -69,6 +76,29 @@
 
   async function handle_routing(req_project_id: string, req_task_id: string) {
     loading = true
+    load_error = null
+
+    // Synthetic data generation is single-turn only. For multi-turn tasks
+    // don't redirect into the synth/qna flows — show the disabled notice.
+    let loaded_task: Task | null
+    try {
+      loaded_task = await load_task(req_project_id, req_task_id)
+    } catch (e) {
+      if (req_project_id !== project_id || req_task_id !== task_id) return
+      // Show the error instead of spinning forever. The key stays marked as
+      // handled so we don't hot-loop retrying a failing load; navigating to a
+      // different key (or remounting the route) retries naturally.
+      load_error = createKilnError(e)
+      loading = false
+      return
+    }
+    if (req_project_id !== project_id || req_task_id !== task_id) return
+    task = loaded_task
+    if (task?.turn_mode === "multiturn") {
+      loading = false
+      return
+    }
+
     const reason_param = $page.url.searchParams.get(
       "reason",
     ) as SynthReasonQueryParam | null
@@ -175,7 +205,7 @@
     no_y_padding
     sub_subtitle="Read the Docs"
     sub_subtitle_link="https://docs.kiln.tech/docs/synthetic-data-generation"
-    action_buttons={has_data_guide
+    action_buttons={has_data_guide && !is_multiturn
       ? [
           {
             label: "Data Guide",
@@ -187,6 +217,23 @@
     {#if loading}
       <div class="w-full min-h-[50vh] flex justify-center items-center">
         <div class="loading loading-spinner loading-lg"></div>
+      </div>
+    {:else if load_error}
+      <div
+        class="w-full min-h-[50vh] flex flex-col justify-center items-center gap-2"
+      >
+        <div class="font-medium">Error Loading Task</div>
+        <div class="text-error text-sm">
+          {load_error.getMessage()}
+        </div>
+      </div>
+    {:else if is_multiturn}
+      <div class="flex flex-col items-center justify-center min-h-[60vh]">
+        <Warning
+          warning_message="Synthetic data generation is not supported for multi-turn tasks."
+          warning_color="warning"
+          warning_icon="info"
+        />
       </div>
     {:else}
       <DataGenIntro

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from "vitest"
-import { render, cleanup } from "@testing-library/svelte"
+import { render, cleanup, fireEvent, waitFor } from "@testing-library/svelte"
 import type { FieldConfig } from "../select_template/spec_templates"
 
 vi.mock("$app/navigation", () => ({
@@ -8,19 +8,8 @@ vi.mock("$app/navigation", () => ({
   beforeNavigate: vi.fn(),
 }))
 
-// TaskSampleSelector fetches candidate runs from the API on mount. Stub it so
-// these tests only exercise create_spec_form's own conditional rendering.
-vi.mock("$lib/utils/task_sample_selector.svelte", async () => {
-  const StubModule = await import(
-    "./__tests__/task_sample_selector_stub.svelte"
-  )
-  return { default: StubModule.default }
-})
-
 // Import the component under test after the mocks are registered.
 const CreateSpecForm = (await import("./create_spec_form.svelte")).default
-
-const SELECTOR_STUB_TESTID = "task-sample-selector-stub"
 
 const field_configs: FieldConfig[] = [
   {
@@ -38,12 +27,9 @@ function render_form(overrides: Record<string, unknown> = {}) {
       property_values: { behaviour: "Be concise" },
       initial_property_values: { behaviour: "Be concise" },
       field_configs,
-      copilot_enabled: true,
       error: null,
       submitting: false,
       warn_before_unload: false,
-      project_id: "p1",
-      task_id: "t1",
       ...overrides,
     },
   })
@@ -53,18 +39,21 @@ afterEach(() => {
   cleanup()
 })
 
-describe("CreateSpecForm copilot path", () => {
-  it("offers the copilot flow and sample selector when copilot is enabled", () => {
-    const { queryByTestId, getByText } = render_form()
-    expect(getByText("Create with Kiln Pro")).toBeTruthy()
-    expect(queryByTestId(SELECTOR_STUB_TESTID)).not.toBeNull()
+describe("CreateSpecForm", () => {
+  it("offers manual creation only", () => {
+    const { getByText, queryByText } = render_form()
+    expect(getByText("Create Eval")).toBeTruthy()
+    // The Kiln Pro creation path was removed: neither its submit button nor
+    // the "or Create Manually" escape hatch beside it should render.
+    expect(queryByText("Create with Kiln Pro")).toBeNull()
+    expect(queryByText("Create Manually")).toBeNull()
   })
 
-  it("falls back to manual creation when copilot is unavailable for the task", () => {
-    const { queryByTestId, getByText } = render_form({
-      copilot_enabled: false,
-    })
-    expect(getByText("Create Eval")).toBeTruthy()
-    expect(queryByTestId(SELECTOR_STUB_TESTID)).toBeNull()
+  it("dispatches create_spec on submit", async () => {
+    const on_create_spec = vi.fn()
+    const { component, getByText } = render_form()
+    component.$on("create_spec", on_create_spec)
+    await fireEvent.click(getByText("Create Eval"))
+    await waitFor(() => expect(on_create_spec).toHaveBeenCalled())
   })
 })

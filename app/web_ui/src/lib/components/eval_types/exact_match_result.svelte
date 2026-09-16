@@ -12,8 +12,12 @@
 
   $: props = extractV2Props(eval_config, "exact_match")
 
-  $: passed = scores.match === 1.0
-  $: has_score = "match" in scores
+  // Deterministic types emit one binary value per declared output score, keyed
+  // by the eval's spec-name json_keys (not a literal "match"). All values are
+  // identical, so the badge passes when every present score is 1.0.
+  $: score_values = Object.values(scores)
+  $: has_score = score_values.length > 0
+  $: passed = has_score && score_values.every((v) => v === 1.0)
 </script>
 
 <div class="flex flex-col gap-2">

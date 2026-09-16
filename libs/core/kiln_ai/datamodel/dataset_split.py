@@ -142,8 +142,10 @@ class DatasetSplit(KilnParentedModel):
         splits: list[DatasetSplitDefinition],
         filter: DatasetFilter,
     ) -> dict[str, list[str]]:
+        # Datasets must not include intermediate multiturn turns — only leaves.
+        runs = list(task.runs())
         valid_ids = []
-        for task_run in task.runs():
+        for task_run in runs:
             if filter(task_run):
                 valid_ids.append(task_run.id)
 
@@ -183,7 +185,12 @@ class DatasetSplit(KilnParentedModel):
         if parent is None:
             raise ValueError("DatasetSplit has no parent task")
 
-        runs = parent.runs(readonly=True)
+        # Include intermediate runs: a split snapshots run IDs at creation
+        # time (leaves-only), but the user can later extend a multiturn
+        # conversation - turning a run that was a leaf when the split was
+        # built into an intermediate. The run is still on disk, so it
+        # shouldn't be reported as "missing".
+        runs = parent.runs(include_intermediate_runs=True, readonly=True)
         all_ids = set(run.id for run in runs)
         all_ids_in_splits = set()
         for ids in self.split_contents.values():
@@ -207,8 +214,11 @@ class DatasetSplit(KilnParentedModel):
         for run_ids in self.split_contents.values():
             all_run_ids.update(run_ids)
 
-        # Find all runs by their IDs
-        for task_run in parent.runs(readonly=True):
+        # Include intermediate runs: a split snapshots run IDs at creation
+        # time (leaves-only), but the user can later extend a multiturn
+        # conversation - turning a run that was a leaf when the split was
+        # built into an intermediate. We still want to resolve it.
+        for task_run in parent.runs(include_intermediate_runs=True, readonly=True):
             if task_run.id in all_run_ids:
                 runs.append(task_run)
 

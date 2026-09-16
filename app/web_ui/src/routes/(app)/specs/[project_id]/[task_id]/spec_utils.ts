@@ -1,21 +1,8 @@
 import { client } from "$lib/api_client"
-import type {
-  Eval,
-  EvalStatus,
-  SpecType,
-  Task,
-  TaskRunConfig,
-} from "$lib/types"
+import type { Eval, EvalStatus, SpecType } from "$lib/types"
 import type { components } from "$lib/api_schema"
-import { isKilnAgentRunConfig } from "$lib/types"
 import type { V2EvalType } from "$lib/utils/eval_types/registry"
 import { spec_field_configs } from "./select_template/spec_templates"
-import {
-  load_task_run_configs,
-  run_configs_by_task_composite_id,
-} from "$lib/stores/run_configs_store"
-import { get_task_composite_id } from "$lib/stores"
-import { get } from "svelte/store"
 import posthog from "posthog-js"
 
 export type SuggestedEdit = {
@@ -24,17 +11,10 @@ export type SuggestedEdit = {
 }
 
 /**
- * Which creation workflow the user picked on the Pro-vs-Manual screen, carried
- * to the spec builder as a `workflow` query param.
- *
- * Anything other than an explicit "pro" is treated as manual, so a missing or
- * malformed param can never surface Kiln Pro to someone who didn't choose it.
+ * The creation workflow the spec builder runs, carried as a `workflow` query
+ * param. Manual is the only one: the builder fills the template form by hand.
  */
-export type SpecWorkflow = "manual" | "pro"
-
-export function parseSpecWorkflow(value: string | null): SpecWorkflow {
-  return value === "pro" ? "pro" : "manual"
-}
+export type SpecWorkflow = "manual"
 
 /**
  * The judge each template implies. Programmatic judges are chosen directly on
@@ -74,26 +54,8 @@ export function eval_template_for_spec_type(
 }
 
 /**
- * Whether the Kiln Pro copilot could assist a spec of this type with this
- * judge. Mirrors the spec builder's own `copilot_enabled` gates that are
- * knowable from the route alone (the builder still applies runtime checks
- * like tool-enabled run configs and account availability).
- */
-export function copilot_supported(
-  spec_type: SpecType,
-  judge: V2EvalType,
-): boolean {
-  return (
-    judge === "llm_judge" &&
-    spec_type !== "appropriate_tool_use" &&
-    spec_type !== "reference_answer_accuracy"
-  )
-}
-
-/**
- * The next screen after a template is picked: the Pro-vs-Manual workflow
- * screen when copilot could assist the template's implied judge, otherwise
- * straight to the spec builder in manual mode.
+ * The next screen after a template is picked: the spec builder, with the
+ * template's implied judge.
  */
 export function next_page_after_template(
   project_id: string,
@@ -123,10 +85,9 @@ export function judge_only_builder_url(
 }
 
 /**
- * The next screen once both template and judge are known: the Pro-vs-Manual
- * workflow screen when copilot could assist, otherwise straight to the spec
- * builder in manual mode. Asking Pro-vs-Manual any earlier would pose the
- * question to users picking judges Kiln Pro can't help with.
+ * The next screen once both template and judge are known: always the spec
+ * builder. Every template's judge is implied, so there is nothing left to ask
+ * between the picker and the builder.
  */
 export function next_page_after_judge(
   project_id: string,
@@ -134,10 +95,6 @@ export function next_page_after_judge(
   spec_type: SpecType,
   judge: V2EvalType,
 ): string {
-  if (copilot_supported(spec_type, judge)) {
-    const params = new URLSearchParams({ type: spec_type, judge })
-    return `/specs/${project_id}/${task_id}/select_workflow?${params.toString()}`
-  }
   return spec_builder_url(project_id, task_id, spec_type, "manual", judge)
 }
 
@@ -154,20 +111,6 @@ export function spec_builder_url(
     judge,
   })
   return `/specs/${project_id}/${task_id}/spec_builder?${params.toString()}`
-}
-
-/**
- * A reviewed example from the spec review process.
- * These examples form the golden dataset for the spec's eval.
- * user_says_meets_spec is optional in the UI (not yet reviewed) but required when sent to backend.
- */
-export type ReviewRow = {
-  input: string
-  output: string
-  model_says_meets_spec: boolean
-  user_says_meets_spec?: boolean
-  feedback: string
-  row_id: string
 }
 
 /**
@@ -191,44 +134,6 @@ export function buildSpecDefinition(
   }
 
   return parts.join("\n\n")
-}
-
-/**
- * Check if the task's default run config has any tools configured
- * @param project_id - The project ID
- * @param task - The task to check
- * @returns true if the default run config has tools, false otherwise
- */
-export async function checkDefaultRunConfigHasTools(
-  project_id: string,
-  task: Task,
-): Promise<boolean> {
-  if (!task.id) {
-    throw new Error("Task ID is required")
-  }
-
-  if (!task.default_run_config_id) {
-    return false
-  }
-
-  await load_task_run_configs(project_id, task.id)
-  const run_configs =
-    get(run_configs_by_task_composite_id)[
-      get_task_composite_id(project_id, task.id)
-    ] ?? []
-
-  const default_config = run_configs.find(
-    (config: TaskRunConfig) => config.id === task.default_run_config_id,
-  )
-
-  if (!default_config) {
-    return false
-  }
-
-  const tools = isKilnAgentRunConfig(default_config.run_config_properties)
-    ? default_config.run_config_properties.tools_config?.tools ?? []
-    : []
-  return tools.length > 0
 }
 
 /**

@@ -22,7 +22,7 @@ describe("referenceDataUsageMode (reference data shown)", () => {
     contains: "reference_field",
     set_check: "reference_field",
     code_eval: "code",
-    pattern_match: "none",
+    pattern_match: "optional",
     tool_call_check: "none",
     step_count_check: "none",
   }

@@ -272,7 +272,7 @@
     <Warning
       warning_color="warning"
       warning_message="This may use considerable compute/credits."
-      tight={true}
+      inline={true}
     />
   </div>
 </Dialog>

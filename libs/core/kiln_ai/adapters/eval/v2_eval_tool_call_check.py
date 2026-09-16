@@ -29,7 +29,7 @@ class ToolCallCheckEval(BaseV2EvalBridge):
 
         actual_calls = self._extract_tool_calls(eval_input.trace)
 
-        passed, _unexpected_fail = self._check(
+        passed = self._check(
             actual_calls,
             props.expected_tools,
             props.match_mode,
@@ -54,7 +54,11 @@ class ToolCallCheckEval(BaseV2EvalBridge):
             if not tool_calls:
                 continue
             for tc in tool_calls:
-                func = tc.get("function", {})
+                # .get("function", {}) isn't enough: the default only covers an
+                # absent key, so a present-but-null value raises on the .get below.
+                func = tc.get("function") if isinstance(tc, dict) else None
+                if not isinstance(func, dict):
+                    func = {}
                 name = func.get("name", "")
                 args_str = func.get("arguments", "{}")
                 try:
@@ -74,17 +78,14 @@ class ToolCallCheckEval(BaseV2EvalBridge):
         expected_tools: list[ToolCallSpec],
         match_mode: str,
         on_unexpected: str,
-    ) -> tuple[bool, bool]:
-        """Check tool calls against expectations.
-
-        Returns (passed, unexpected_fail).
-        """
+    ) -> bool:
+        """Check tool calls against expectations, returning pass/fail."""
         if match_mode == "never":
             for spec in expected_tools:
                 for call in actual_calls:
                     if self._call_matches_spec(call, spec):
-                        return False, False
-            return True, False
+                        return False
+            return True
 
         if match_mode == "any":
             found_any = False
@@ -112,17 +113,14 @@ class ToolCallCheckEval(BaseV2EvalBridge):
         else:
             passed = False
 
-        unexpected_fail = False
         if passed and on_unexpected == "fail":
             for call in actual_calls:
                 if not any(
                     self._call_matches_spec(call, spec) for spec in expected_tools
                 ):
-                    passed = False
-                    unexpected_fail = True
-                    break
+                    return False
 
-        return passed, unexpected_fail
+        return passed
 
     def _check_ordered(
         self,

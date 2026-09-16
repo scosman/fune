@@ -926,7 +926,7 @@
       </h1>
 
       {#if api_key_provider.api_key_warning}
-        <div class="pt-2">
+        <div class="pt-4">
           <Warning
             warning_color="warning"
             warning_message={api_key_provider.api_key_warning}

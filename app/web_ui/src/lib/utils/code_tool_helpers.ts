@@ -58,51 +58,6 @@ function jsonTypeToPython(prop: JsonSchemaProperty): string {
   }
 }
 
-const PYTHON_RESERVED_WORDS = new Set([
-  "False",
-  "None",
-  "True",
-  "and",
-  "as",
-  "assert",
-  "async",
-  "await",
-  "break",
-  "class",
-  "continue",
-  "def",
-  "del",
-  "elif",
-  "else",
-  "except",
-  "finally",
-  "for",
-  "from",
-  "global",
-  "if",
-  "import",
-  "in",
-  "is",
-  "lambda",
-  "nonlocal",
-  "not",
-  "or",
-  "pass",
-  "raise",
-  "return",
-  "try",
-  "while",
-  "with",
-  "yield",
-])
-
-/**
- * Escape a parameter name if it collides with a Python reserved word.
- */
-function safePythonName(name: string): string {
-  return PYTHON_RESERVED_WORDS.has(name) ? `${name}_param` : name
-}
-
 export interface CodeToolParam {
   name: string
   pythonType: string
@@ -141,12 +96,14 @@ function buildParamList(params: CodeToolParam[]): string {
   const requiredParams = params.filter((p) => p.required)
   const optionalParams = params.filter((p) => !p.required)
 
+  // Schema property names are used verbatim: the sandbox calls run() with
+  // keyword arguments keyed by these exact names, so renaming any would break the call.
   const parts: string[] = []
   for (const p of requiredParams) {
-    parts.push(`${safePythonName(p.name)}: ${p.pythonType}`)
+    parts.push(`${p.name}: ${p.pythonType}`)
   }
   for (const p of optionalParams) {
-    parts.push(`${safePythonName(p.name)}: ${p.pythonType} | None = None`)
+    parts.push(`${p.name}: ${p.pythonType} | None = None`)
   }
   return parts.join(", ")
 }
@@ -160,9 +117,9 @@ export function generateCodeToolPlaceholder(
 ): string {
   const params = extractParams(schema)
   const paramList = buildParamList(params)
-  // Prevent the description from prematurely closing the triple-quoted docstring.
-  // Replace any embedded """ with '' (two single-quotes) which is safe inside """.
-  const safeDesc = toolDescription.replace(/"""/g, "''")
+  // Escape backslashes then double-quotes so the description can neither close the
+  // triple-quoted docstring nor leave a dangling escape (e.g. a trailing " or \).
+  const safeDesc = toolDescription.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 
   return `def run(${paramList}) -> str:
     """${safeDesc}"""
@@ -197,6 +154,81 @@ export function isCodeUnmodified(
   originalPlaceholder: string,
 ): boolean {
   return currentCode.trim() === "" || currentCode === originalPlaceholder
+}
+
+export interface Step2CodeResolution {
+  code: string
+  generatedPlaceholder: string
+  schemaChangedHint: boolean
+  // Whether the clone's seed code was used. When true the caller drops it so a
+  // later return to the Code step doesn't overwrite the user's edits with it.
+  cloneConsumed: boolean
+}
+
+/**
+ * Decide the Code step's editor contents when the user advances from the
+ * Define step.
+ *
+ * Keyed on whether code already exists — not on the wizard step — because the
+ * browser Back button pops the shallow-routing step state, so the step alone
+ * can't tell a first visit from a return. Defaulting to "first visit" would
+ * overwrite the user's authored code with a fresh placeholder. The cases:
+ *
+ *  - No code yet: seed from the clone (if any), else the generated placeholder.
+ *  - Untouched placeholder: regenerate it for the (possibly changed) schema.
+ *  - User-authored code: preserve it, and flag when the schema changed so the
+ *    user knows to reconcile run()'s parameters.
+ */
+export function resolveStep2Code(args: {
+  code: string
+  newPlaceholder: string
+  generatedPlaceholder: string
+  schemaChangedHint: boolean
+  cloneCode: string | null
+}): Step2CodeResolution {
+  const {
+    code,
+    newPlaceholder,
+    generatedPlaceholder,
+    schemaChangedHint,
+    cloneCode,
+  } = args
+
+  if (code === "") {
+    const useClone = !!cloneCode
+    return {
+      code: useClone ? (cloneCode as string) : newPlaceholder,
+      generatedPlaceholder: newPlaceholder,
+      schemaChangedHint: false,
+      cloneConsumed: useClone,
+    }
+  }
+
+  if (isCodeUnmodified(code, generatedPlaceholder)) {
+    return {
+      code: newPlaceholder,
+      generatedPlaceholder: newPlaceholder,
+      schemaChangedHint: false,
+      cloneConsumed: false,
+    }
+  }
+
+  if (newPlaceholder !== generatedPlaceholder) {
+    return {
+      code,
+      generatedPlaceholder: newPlaceholder,
+      schemaChangedHint: true,
+      cloneConsumed: false,
+    }
+  }
+
+  // User-authored code and the schema is unchanged: leave everything as-is.
+  return {
+    code,
+    generatedPlaceholder,
+    schemaChangedHint,
+    cloneConsumed: false,
+  }
 }
 
 /**

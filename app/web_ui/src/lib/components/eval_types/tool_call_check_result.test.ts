@@ -29,17 +29,23 @@ describe("ToolCallCheckResult", () => {
     expect(container).toBeTruthy()
   })
 
-  it("shows Pass badge when match score is 1.0", () => {
+  it("shows Pass badge when the score is 1.0", () => {
     const { container } = render(ToolCallCheckResult, {
-      props: { scores: { match: 1.0 }, eval_config: makeConfig() },
+      props: {
+        scores: { expected_tools_called: 1.0 },
+        eval_config: makeConfig(),
+      },
     })
     expect(container.textContent).toContain("Pass")
     expect(container.querySelector(".badge-success")).toBeTruthy()
   })
 
-  it("shows Fail badge when match score is 0.0", () => {
+  it("shows Fail badge when the score is 0.0", () => {
     const { container } = render(ToolCallCheckResult, {
-      props: { scores: { match: 0.0 }, eval_config: makeConfig() },
+      props: {
+        scores: { expected_tools_called: 0.0 },
+        eval_config: makeConfig(),
+      },
     })
     expect(container.textContent).toContain("Fail")
     expect(container.querySelector(".badge-error")).toBeTruthy()
@@ -59,7 +65,7 @@ describe("ToolCallCheckResult", () => {
   it("shows 'any' match mode label", () => {
     const { container } = render(ToolCallCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { expected_tools_called: 1.0 },
         eval_config: makeConfig({ match_mode: "any" }),
       },
     })
@@ -69,7 +75,7 @@ describe("ToolCallCheckResult", () => {
   it("shows 'all' match mode label", () => {
     const { container } = render(ToolCallCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { expected_tools_called: 1.0 },
         eval_config: makeConfig({ match_mode: "all" }),
       },
     })
@@ -79,7 +85,7 @@ describe("ToolCallCheckResult", () => {
   it("shows 'ordered' match mode label", () => {
     const { container } = render(ToolCallCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { expected_tools_called: 1.0 },
         eval_config: makeConfig({ match_mode: "ordered" }),
       },
     })
@@ -91,7 +97,7 @@ describe("ToolCallCheckResult", () => {
   it("shows 'never' match mode label", () => {
     const { container } = render(ToolCallCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { expected_tools_called: 1.0 },
         eval_config: makeConfig({ match_mode: "never" }),
       },
     })
@@ -101,7 +107,7 @@ describe("ToolCallCheckResult", () => {
   it("shows tool names from config", () => {
     const { container } = render(ToolCallCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { expected_tools_called: 1.0 },
         eval_config: makeConfig({
           expected_tools: [{ tool_name: "alpha" }, { tool_name: "beta" }],
         }),
@@ -114,7 +120,7 @@ describe("ToolCallCheckResult", () => {
   it("shows fail on unexpected tools message", () => {
     const { container } = render(ToolCallCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { expected_tools_called: 1.0 },
         eval_config: makeConfig({ on_unexpected_tools: "fail" }),
       },
     })
@@ -124,7 +130,7 @@ describe("ToolCallCheckResult", () => {
   it("does not show fail on unexpected tools when set to ignore", () => {
     const { container } = render(ToolCallCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { expected_tools_called: 1.0 },
         eval_config: makeConfig({ on_unexpected_tools: "ignore" }),
       },
     })
@@ -135,17 +141,17 @@ describe("ToolCallCheckResult", () => {
 
   it("shows scores via EvalResultScores", () => {
     const { container } = render(ToolCallCheckResult, {
-      props: { scores: { match: 1.0 } },
+      props: { scores: { expected_tools_called: 1.0 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("expected_tools_called:")
     expect(container.textContent).toContain("1.00")
   })
 
   it("does not show config details when eval_config is null", () => {
     const { container } = render(ToolCallCheckResult, {
-      props: { scores: { match: 1.0 } },
+      props: { scores: { expected_tools_called: 1.0 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("expected_tools_called:")
     expect(container.textContent).not.toContain("Tools:")
     expect(container.textContent).not.toContain("All expected tools")
     expect(container.textContent).not.toContain("Any expected tool")

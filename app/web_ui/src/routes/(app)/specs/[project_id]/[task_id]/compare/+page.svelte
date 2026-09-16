@@ -1112,13 +1112,23 @@
                                 {/if}
                                 <div class="text-left">
                                   {#if getEvalDatasetSize(section.eval_id) === 0}
-                                    <button
-                                      class="btn btn-xs mt-1"
-                                      on:click={() =>
-                                        navigateToAddData(section.eval_id)}
-                                    >
-                                      Add Eval Data
-                                    </button>
+                                    {#if eval_split(eval_data_cache[section.eval_id], "test")?.source === "eval_input"}
+                                      <!-- EvalInput-typed slice: data is minted by the
+                                        eval builder; the add-data flow tags TaskRuns,
+                                        which doesn't apply. -->
+                                      <div class="text-xs text-gray-500">
+                                        No eval data. This eval's data is
+                                        created by the eval builder.
+                                      </div>
+                                    {:else}
+                                      <button
+                                        class="btn btn-xs mt-1"
+                                        on:click={() =>
+                                          navigateToAddData(section.eval_id)}
+                                      >
+                                        Add Eval Data
+                                      </button>
+                                    {/if}
                                   {:else if defaultEvalConfigId && runConfigId}
                                     <RunEval
                                       eval_id={section.eval_id}

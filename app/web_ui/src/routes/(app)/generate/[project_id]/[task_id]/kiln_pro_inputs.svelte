@@ -211,7 +211,7 @@
       return
     }
     // Regenerating discards every input (and any outputs made from them), so
-    // confirm — same native confirm the New Batch Plan button uses. Retry is
+    // confirm — same native confirm the Refine Plan button uses. Retry is
     // additive, so it just runs.
     if (inputs_action === "regenerate") {
       const msg = `Are you sure you want to regenerate all ${total} inputs? This discards the current inputs${
@@ -559,7 +559,7 @@
           warning_message={active_warning.message}
           warning_color={active_warning.color}
           warning_icon={active_warning.icon}
-          tight
+          inline={true}
         />
         {#if active_warning.retry && !saving}
           <button

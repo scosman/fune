@@ -131,7 +131,7 @@ describe("EvalTestRunPane", () => {
       expect(goToRunLink?.textContent?.trim()).toContain("Go to Run")
     })
 
-    it("does NOT show Save Without Testing button (D10)", () => {
+    it("does NOT show Save Without Testing button", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { container } = render(EvalTestRunPane as any, {
         props: { available_runs: [], runs_loading: false },
@@ -145,7 +145,7 @@ describe("EvalTestRunPane", () => {
   })
 
   describe("State 2: Ready (pick input)", () => {
-    it("renders selected run card without quick-picks (D15)", () => {
+    it("renders selected run card without quick-picks", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { container } = render(EvalTestRunPane as any, {
         props: {
@@ -167,7 +167,7 @@ describe("EvalTestRunPane", () => {
       expect(quickPicks.length).toBe(0)
     })
 
-    it("does NOT show Browse all dataset inputs link (D15)", () => {
+    it("does NOT show Browse all dataset inputs link", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { container } = render(EvalTestRunPane as any, {
         props: {
@@ -183,7 +183,7 @@ describe("EvalTestRunPane", () => {
       expect(browseLink).toBeNull()
     })
 
-    it("shows Run button with btn-primary btn-outline style (D11)", () => {
+    it("shows Run button with btn-primary btn-outline style", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { container } = render(EvalTestRunPane as any, {
         props: {
@@ -202,7 +202,7 @@ describe("EvalTestRunPane", () => {
       expect(runBtn?.classList.contains("btn-outline")).toBe(true)
     })
 
-    it("does NOT show results placeholder (D12)", () => {
+    it("does NOT show results placeholder", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { container } = render(EvalTestRunPane as any, {
         props: {
@@ -387,7 +387,7 @@ describe("EvalTestRunPane", () => {
       ).toContain("tone")
     })
 
-    it("selected card shows Change button that opens browse dialog (D15)", () => {
+    it("selected card shows Change button that opens browse dialog", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { container } = render(EvalTestRunPane as any, {
         props: {
@@ -646,7 +646,7 @@ describe("EvalTestRunPane", () => {
       expect(container.textContent).toContain("Missing expected scores")
     })
 
-    it("shows Run again button with btn-primary btn-outline style (D11) and no Save button (D10)", () => {
+    it("shows Run again button with btn-primary btn-outline style and no Save button", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { container } = render(EvalTestRunPane as any, {
         props: {
@@ -772,7 +772,7 @@ describe("EvalTestRunPane", () => {
     })
   })
 
-  describe("Test Run heading and subtitle (D13)", () => {
+  describe("Test Run heading and subtitle", () => {
     it("renders Test Run heading", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { container } = render(EvalTestRunPane as any, {
@@ -825,7 +825,7 @@ describe("TestRunInputCard", () => {
     cleanup()
   })
 
-  it("renders selected variant with 'Selected Test Run' label in non-grey (D14)", () => {
+  it("renders selected variant with 'Selected Test Run' label in non-grey", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { container } = render(TestRunInputCard as any, {
       props: {
@@ -1914,7 +1914,7 @@ describe("Auto-select integration", () => {
     expect(container.textContent).toContain("Select a run to get started")
   })
 
-  it("does not show quick-picks when only 1 run (D15)", () => {
+  it("does not show quick-picks when only 1 run", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { container } = render(EvalTestRunPane as any, {
       props: {
@@ -2135,6 +2135,18 @@ describe("ReferenceDataField callout per usage mode", () => {
     expect(callout?.textContent).toContain("expected values (ground truth)")
     expect(callout?.textContent).toContain("reference_data")
     expect(callout?.textContent).toContain(".get(")
+  })
+
+  it("renders optional callout pointing at the Output to Check expression", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { container } = render(ReferenceDataField as any, {
+      props: { reference_data: "", usage_mode: "optional" },
+    })
+    const callout = container.querySelector('[data-testid="ref-data-callout"]')
+    expect(callout).not.toBeNull()
+    expect(callout?.textContent).toContain("expected values (ground truth)")
+    expect(callout?.textContent).toContain("Output to Check")
+    expect(callout?.textContent).toContain("{{ reference_data.expected_type }}")
   })
 
   it("uses the shared CalloutCard component (blue style)", () => {

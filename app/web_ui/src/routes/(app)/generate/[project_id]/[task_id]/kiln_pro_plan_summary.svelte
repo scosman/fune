@@ -19,7 +19,7 @@
       >
         <StarsIcon />
       </span>
-      Batch Overview
+      Overview
     </div>
     {#if out_of_sync}
       <Warning
@@ -27,7 +27,7 @@
         warning_color="warning"
         warning_icon="exclaim"
         text_size="xs"
-        tight
+        inline={true}
       />
     {/if}
   </div>

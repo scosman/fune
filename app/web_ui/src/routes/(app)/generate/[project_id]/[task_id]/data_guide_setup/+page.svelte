@@ -19,6 +19,11 @@
   import Completed from "$lib/ui/completed.svelte"
   import { dedupe_by_input } from "$lib/utils/dedupe_by_input"
   import posthog from "posthog-js"
+  import {
+    data_guide_return,
+    read_data_guide_caller,
+    with_data_guide_caller,
+  } from "$lib/utils/data_guide_return"
 
   type GuideBuilderState =
     | "loading"
@@ -72,6 +77,11 @@
 
   $: project_id = $page.params.project_id!
   $: task_id = $page.params.task_id!
+  // Which page opened the setup chain (no key means synthetic data
+  // generation): every link out of here forwards it, and the breadcrumb and
+  // the finish action return to it.
+  $: caller = read_data_guide_caller($page.url.searchParams)
+  $: return_target = data_guide_return(caller, project_id, task_id)
   $: agentInfo.set({
     name: "Set Up Data Guide",
     description: `Setup the task input data guide for project ${project_id}, task ${task_id}. The input data guide describes the structure, rules, and examples for synthetic input generation.`,
@@ -97,9 +107,13 @@
         return
       }
       if (data) {
-        goto(`/generate/${project_id}/${task_id}/data_guide`, {
-          replaceState: true,
-        })
+        goto(
+          with_data_guide_caller(
+            `/generate/${project_id}/${task_id}/data_guide`,
+            caller,
+          ),
+          { replaceState: true },
+        )
         return
       }
     } catch (e) {
@@ -282,11 +296,11 @@
     sub_subtitle_link="https://docs.kiln.tech/docs/synthetic-data-generation"
     breadcrumbs={[
       {
-        label: "Synthetic Data Generation",
-        href: `/generate/${project_id}/${task_id}/synth?session_continued=true`,
-        // This page is a sub-flow of /synth — replace rather than push so
-        // back from /synth returns to wherever the user originally came
-        // from (cards page, spec page, etc.) instead of bouncing here.
+        label: return_target.label,
+        href: return_target.href,
+        // This page is a sub-flow of its caller — replace rather than push
+        // so back from the caller returns to wherever the user originally
+        // came from (cards page, spec page, etc.) instead of bouncing here.
         replace_state: true,
       },
     ]}
@@ -296,8 +310,8 @@
     {#if saved}
       <Completed
         title="Data Guide Saved"
-        subtitle="Your Data Guide is saved. Click Continue to return to Synthetic Data Generation."
-        link={`/generate/${project_id}/${task_id}/synth?session_continued=true`}
+        subtitle={`Your Data Guide is saved. Click Continue to return to ${return_target.label}.`}
+        link={return_target.href}
         button_text="Continue"
       />
     {:else if current_state === "loading"}

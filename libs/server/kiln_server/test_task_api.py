@@ -317,6 +317,97 @@ def test_update_task_unexpected_return_type(client, project_and_task):
     assert response.json()["message"] == "Failed to patch task."
 
 
+def test_update_task_turn_mode_unchanged_succeeds(client, project_and_task):
+    project, task = project_and_task
+
+    update_data = {"turn_mode": "single_turn", "description": "Updated description"}
+
+    with patch("kiln_server.task_api.project_from_id") as mock_project_from_id:
+        mock_project_from_id.return_value = project
+        response = client.patch(
+            f"/api/projects/{project.id}/tasks/{task.id}", json=update_data
+        )
+
+    assert response.status_code == 200
+    res = response.json()
+    assert res["turn_mode"] == "single_turn"
+    assert res["description"] == "Updated description"
+
+
+def test_update_task_turn_mode_change_rejected(client, project_and_task):
+    project, task = project_and_task
+
+    update_data = {"turn_mode": "multiturn"}
+
+    with patch("kiln_server.task_api.project_from_id") as mock_project_from_id:
+        mock_project_from_id.return_value = project
+        response = client.patch(
+            f"/api/projects/{project.id}/tasks/{task.id}", json=update_data
+        )
+
+    assert response.status_code == 400
+    assert (
+        response.json()["message"] == "Task turn_mode cannot be changed after creation."
+    )
+
+    # Confirm on-disk state was not mutated by the rejected PATCH.
+    reloaded = Task.from_id_and_parent_path(task.id, project.path)
+    assert reloaded is not None
+    assert reloaded.turn_mode.value == "single_turn"
+
+
+def test_create_task_multiturn_with_structured_input_schema_rejected(client, tmp_path):
+    project_path = tmp_path / "real_project" / Project.base_filename()
+    project_path.parent.mkdir()
+
+    project = Project(name="Real Project", path=str(project_path))
+    project.save_to_file()
+
+    task_data = {
+        "name": "Bad Multiturn Task",
+        "description": "Should fail validation",
+        "instruction": "Task instruction",
+        "turn_mode": "multiturn",
+        "input_json_schema": (
+            '{"type": "object", "properties": {"x": {"type": "string"}},'
+            ' "required": ["x"]}'
+        ),
+    }
+
+    with patch("kiln_server.task_api.project_from_id") as mock_project_from_id:
+        mock_project_from_id.return_value = project
+        response = client.post(f"/api/projects/{project.id}/tasks", json=task_data)
+
+    assert response.status_code == 422
+    assert "structured input" in response.json()["message"].lower()
+
+
+def test_create_task_multiturn_with_structured_output_schema_rejected(client, tmp_path):
+    project_path = tmp_path / "real_project" / Project.base_filename()
+    project_path.parent.mkdir()
+
+    project = Project(name="Real Project", path=str(project_path))
+    project.save_to_file()
+
+    task_data = {
+        "name": "Bad Multiturn Task",
+        "description": "Should fail validation",
+        "instruction": "Task instruction",
+        "turn_mode": "multiturn",
+        "output_json_schema": (
+            '{"type": "object", "properties": {"y": {"type": "string"}},'
+            ' "required": ["y"]}'
+        ),
+    }
+
+    with patch("kiln_server.task_api.project_from_id") as mock_project_from_id:
+        mock_project_from_id.return_value = project
+        response = client.post(f"/api/projects/{project.id}/tasks", json=task_data)
+
+    assert response.status_code == 422
+    assert "structured output" in response.json()["message"].lower()
+
+
 def test_get_rating_options_empty_task(client, project_and_task):
     project, task = project_and_task
 

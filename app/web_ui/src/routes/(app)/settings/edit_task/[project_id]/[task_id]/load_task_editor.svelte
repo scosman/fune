@@ -75,6 +75,7 @@
     redirect_on_created={clone_mode ? "/run" : null}
     hide_example_task={true}
     explicit_project_id={project_id}
+    read_only_turn_mode={!clone_mode}
     bind:saved
   />
 {/if}

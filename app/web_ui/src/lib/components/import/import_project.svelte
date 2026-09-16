@@ -103,6 +103,14 @@
   }
 
   function redirect_if_missing_state(step: WizardStep): boolean {
+    // The local trust step depends on the component-local selected file path,
+    // which the store-only validate_step_requirements can't see. A remount or
+    // deep-link to #local-trust starts with no path, so send the user back to
+    // pick a file rather than letting Trust Project import an empty path.
+    if (step === "local_trust_confirm" && !import_project_path) {
+      set_step("local_file")
+      return true
+    }
     if (!validate_step_requirements(step)) {
       clear_wizard_store()
       replaceState(window.location.pathname + window.location.search, {})
@@ -147,7 +155,10 @@
   onMount(() => {
     const url_param = read_url_query_param("url")
     if (url_param) {
-      update_store({ git_url: url_param })
+      // Seed the url step from the deep-link param. Route through adopt_git_url
+      // so a param pointing at a different repo than the persisted session
+      // clears its stale downstream state (and its trust skip).
+      adopt_git_url(url_param)
       if (window.location.hash !== "#git") {
         window.location.hash = "#git"
       }
@@ -166,13 +177,39 @@
     set_step("credentials")
   }
 
+  // Adopt the repo URL the user entered/confirmed on the url step. Trust is
+  // granted per-repo, and clone_path/branch/project all describe whichever repo
+  // was entered before. When the URL changes we drop that downstream state so
+  // it can never be mistaken for the current repo — in particular so the
+  // clone_path-based trust skip below only fires for the same repo the trust
+  // gate was passed for.
+  function adopt_git_url(
+    url: string,
+    extra_fields: Partial<typeof $git_import_wizard_store> = {},
+  ) {
+    const url_changed = url !== $git_import_wizard_store.git_url
+    update_store({
+      git_url: url,
+      ...extra_fields,
+      ...(url_changed
+        ? {
+            clone_path: "",
+            selected_branch: "",
+            selected_project_path: "",
+            selected_project_id: "",
+            selected_project_name: "",
+          }
+        : {}),
+    })
+  }
+
   function on_url_success(url: string, detected_auth_method: string) {
-    update_store({ git_url: url, auth_mode: detected_auth_method })
+    adopt_git_url(url, { auth_mode: detected_auth_method })
     set_step("trust_confirm")
   }
 
   function on_url_auth_required(url: string) {
-    update_store({ git_url: url })
+    adopt_git_url(url)
     go_to_credentials()
   }
 
@@ -190,9 +227,11 @@
         auth_mode: detected_auth_method,
       })
     }
-    // If clone_path is set, the user already passed the trust gate and the
-    // branch step redirected back here for credentials — skip trust and
-    // return directly to branch.
+    // A clone_path here means this repo already reached the branch step, which
+    // is only possible after passing the trust gate for it — the branch step
+    // bounced back for credentials. Skipping trust is safe because
+    // adopt_git_url clears clone_path whenever the URL changes, so it can only
+    // be set for the repo currently being imported.
     if ($git_import_wizard_store.clone_path) {
       set_step("branch")
     } else {
@@ -296,6 +335,12 @@
   }
 
   async function on_local_trust_confirmed() {
+    // Never import without a selected path (e.g. reached here with an empty
+    // path when the file picker was unavailable). Send the user back to pick.
+    if (!import_project_path) {
+      set_step("local_file")
+      return
+    }
     // Navigate back to local_file WITHOUT resetting state (set_step clears
     // the path and error state, which we need to preserve for the import).
     current_step = "local_file"

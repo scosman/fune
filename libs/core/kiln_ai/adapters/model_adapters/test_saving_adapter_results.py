@@ -15,7 +15,7 @@ from kiln_ai.datamodel import (
     Task,
     Usage,
 )
-from kiln_ai.datamodel.datamodel_enums import InputType
+from kiln_ai.datamodel.datamodel_enums import InputType, TurnMode
 from kiln_ai.datamodel.run_config import KilnAgentRunConfigProperties
 from kiln_ai.utils.config import Config
 
@@ -38,6 +38,7 @@ def test_task(tmp_path):
         parent=project,
         name="test_task",
         instruction="Task instruction",
+        turn_mode=TurnMode.multiturn,
     )
     task.save_to_file()
     return task
@@ -92,7 +93,7 @@ def test_save_run_isolation(test_task, adapter):
 
     # Verify that the data can be read back from disk
     reloaded_task = Task.load_from_file(test_task.path)
-    reloaded_runs = reloaded_task.runs()
+    reloaded_runs = reloaded_task.runs(include_intermediate_runs=True)
     assert len(reloaded_runs) == 1
     reloaded_run = reloaded_runs[0]
     assert reloaded_run.input == input_data
@@ -119,8 +120,10 @@ def test_save_run_isolation(test_task, adapter):
     )
     task_output = adapter.generate_run(input_data, None, different_run_output)
     task_output.save_to_file()
-    assert len(test_task.runs()) == 2
-    assert "Different output" in set(run.output.output for run in test_task.runs())
+    assert len(test_task.runs(include_intermediate_runs=True)) == 2
+    assert "Different output" in set(
+        run.output.output for run in test_task.runs(include_intermediate_runs=True)
+    )
 
     # run again with input of different type. Should create a new TaskRun and TaskOutput.
     task_output = adapter.generate_run(
@@ -137,11 +140,15 @@ def test_save_run_isolation(test_task, adapter):
         run_output,
     )
     task_output.save_to_file()
-    assert len(test_task.runs()) == 3
+    assert len(test_task.runs(include_intermediate_runs=True)) == 3
     assert task_output.input == input_data
     assert task_output.input_source.type == DataSourceType.synthetic
-    assert "Different output" in set(run.output.output for run in test_task.runs())
-    assert output_data in set(run.output.output for run in test_task.runs())
+    assert "Different output" in set(
+        run.output.output for run in test_task.runs(include_intermediate_runs=True)
+    )
+    assert output_data in set(
+        run.output.output for run in test_task.runs(include_intermediate_runs=True)
+    )
 
 
 def test_generate_run_non_ascii(test_task, adapter):
@@ -165,7 +172,7 @@ def test_generate_run_non_ascii(test_task, adapter):
 
     # check that the stringified unicode strings can be read back from the file
     reloaded_task = Task.load_from_file(test_task.path)
-    reloaded_runs = reloaded_task.runs()
+    reloaded_runs = reloaded_task.runs(include_intermediate_runs=True)
     assert len(reloaded_runs) == 1
     reloaded_run = reloaded_runs[0]
     assert reloaded_run.input == '{"key": "input with non-ascii character: 你好"}'
@@ -186,7 +193,7 @@ async def test_autosave_false(test_task, adapter):
         run = await adapter.invoke(input_data)
 
         # Check that no runs were saved
-        assert len(test_task.runs()) == 0
+        assert len(test_task.runs(include_intermediate_runs=True)) == 0
 
         # Check that the run ID is not set
         assert run.id is None
@@ -205,7 +212,7 @@ async def test_autosave_true_with_disabled(test_task, adapter):
         run = await adapter.invoke(input_data)
 
         # Check that no runs were saved
-        assert len(test_task.runs()) == 0
+        assert len(test_task.runs(include_intermediate_runs=True)) == 0
 
         # Check that the run ID is not set
         assert run.id is None
@@ -226,7 +233,7 @@ async def test_autosave_true(test_task, adapter):
         assert run.id is not None
 
         # Check that an task input was saved
-        task_runs = test_task.runs()
+        task_runs = test_task.runs(include_intermediate_runs=True)
         assert len(task_runs) == 1
         assert task_runs[0].input == input_data
         assert task_runs[0].input_source.type == DataSourceType.human
@@ -316,7 +323,7 @@ async def test_invoke_continue_session(test_task, adapter):
         assert new_run.trace[-1]["content"] == "How can I help?"
 
         reloaded = Task.load_from_file(test_task.path)
-        runs = reloaded.runs()
+        runs = reloaded.runs(include_intermediate_runs=True)
         assert len(runs) == 1
         assert runs[0].output.output == "How can I help?"
 

@@ -307,7 +307,9 @@
   ]}
 >
   <div class="flex flex-col gap-3">
-    <div class="mt-2">
+    <!-- A flex item never collapses margins with its child, so this wrapper
+         carries the full 16px the dialog title had before. -->
+    <div class="mt-4">
       <Warning
         large_icon={true}
         warning_icon="exclaim"

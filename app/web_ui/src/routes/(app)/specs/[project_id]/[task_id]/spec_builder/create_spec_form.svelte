@@ -5,8 +5,6 @@
   import type { KilnError } from "$lib/utils/error_handlers"
   import type { FieldConfig } from "../select_template/spec_templates"
   import { filename_string_short_validator } from "$lib/utils/input_validators"
-  import TaskSampleSelector from "$lib/utils/task_sample_selector.svelte"
-  import type { TaskSampleExample } from "$lib/utils/task_sample_example"
   import type { Priority } from "$lib/types"
 
   export let name: string
@@ -14,21 +12,12 @@
   export let initial_property_values: Record<string, string | null>
   export let priority: Priority = 1
   export let field_configs: FieldConfig[]
-  export let copilot_enabled: boolean
   export let error: KilnError | null
   export let submitting: boolean
-  export let is_prompt_building: boolean = false
   export let warn_before_unload: boolean
-  export let project_id: string
-  export let task_id: string
-  export let task_sample_example: TaskSampleExample | null = null
-  export let has_unsaved_manual_entry: boolean = false
-
-  let form_container: FormContainer
 
   const dispatch = createEventDispatcher<{
-    create_with_copilot: void
-    create_without_copilot: void
+    create_spec: void
   }>()
 
   function reset_field(key: string) {
@@ -46,31 +35,17 @@
     return false
   }
 
-  // copilot_enabled = copilot is available for this task
-  $: copilot_allowed = copilot_enabled
-
   $: computed_warn_before_unload =
     warn_before_unload &&
     has_form_changes(property_values, initial_property_values)
 
   function handle_submit() {
-    if (copilot_allowed) {
-      dispatch("create_with_copilot")
-    } else {
-      dispatch("create_without_copilot")
-    }
-  }
-
-  async function handle_secondary_click() {
-    if (await form_container.validate_only()) {
-      dispatch("create_without_copilot")
-    }
+    dispatch("create_spec")
   }
 </script>
 
 <FormContainer
-  bind:this={form_container}
-  submit_label={copilot_allowed ? "Create with Kiln Pro" : "Create Eval"}
+  submit_label="Create Eval"
   on:submit={handle_submit}
   bind:error
   bind:submitting
@@ -119,27 +94,4 @@
         : undefined}
     />
   {/each}
-
-  {#if copilot_allowed}
-    <TaskSampleSelector
-      {project_id}
-      {task_id}
-      bind:selected_example={task_sample_example}
-      bind:has_unsaved_manual_entry
-      {is_prompt_building}
-    />
-  {/if}
 </FormContainer>
-
-{#if copilot_allowed}
-  <div class="flex flex-row gap-1 mt-4 justify-end">
-    <span class="text-sm text-gray-500">or</span>
-    <button
-      class="link underline text-sm text-gray-500"
-      disabled={submitting}
-      on:click={handle_secondary_click}
-    >
-      Create Manually
-    </button>
-  </div>
-{/if}

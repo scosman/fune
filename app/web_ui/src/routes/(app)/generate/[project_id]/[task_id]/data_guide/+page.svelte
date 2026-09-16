@@ -18,6 +18,11 @@
   import { isMacOS } from "$lib/utils/platform"
   import { pending_data_guide_refine_handoff } from "./refine_handoff_store"
   import posthog from "posthog-js"
+  import {
+    data_guide_return,
+    read_data_guide_caller,
+    with_data_guide_caller,
+  } from "$lib/utils/data_guide_return"
 
   type ViewState = "loading" | "saved"
 
@@ -44,6 +49,11 @@
 
   $: project_id = $page.params.project_id!
   $: task_id = $page.params.task_id!
+  // Which page opened the setup chain (no key means synthetic data
+  // generation): every link out of here forwards it, and the breadcrumb and
+  // the finish action return to it.
+  $: caller = read_data_guide_caller($page.url.searchParams)
+  $: return_target = data_guide_return(caller, project_id, task_id)
   $: agentInfo.set({
     name: "Data Guide",
     description: `View and refine the saved task input data guide for project ${project_id}, task ${task_id}.`,
@@ -78,10 +88,10 @@
       return
     }
 
-    // No saved guide content → send them to the synth page intro, which is
-    // the single entry point for creating a new guide (manual or Kiln Pro).
+    // No saved guide content → send them back to the caller, whose intro
+    // is the entry point for creating a new guide (manual or Kiln Pro).
     if (!guide.trim()) {
-      goto(`/generate/${project_id}/${task_id}/synth`)
+      goto(return_target.view_href)
       return
     }
 
@@ -99,7 +109,12 @@
       saved_guide: guide,
       input_run_config: event.detail.input_run_config,
     })
-    goto(`/generate/${project_id}/${task_id}/data_guide/refine`)
+    goto(
+      with_data_guide_caller(
+        `/generate/${project_id}/${task_id}/data_guide/refine`,
+        caller,
+      ),
+    )
   }
 
   async function handle_save_with_guide(event: CustomEvent<{ guide: string }>) {
@@ -137,7 +152,7 @@
   let delete_dialog: DeleteDialog | null = null
   $: delete_url = `/api/projects/${project_id}/tasks/${task_id}/data_gen_guide`
   function after_delete() {
-    goto(`/generate/${project_id}/${task_id}/synth`)
+    goto(return_target.view_href)
   }
 </script>
 
@@ -148,11 +163,11 @@
     sub_subtitle_link="https://docs.kiln.tech/docs/synthetic-data-generation"
     breadcrumbs={[
       {
-        label: "Synthetic Data Generation",
-        href: `/generate/${project_id}/${task_id}/synth`,
-        // This page is a sub-flow of /synth — replace rather than push so
-        // back from /synth returns to wherever the user originally came
-        // from (cards page, spec page, etc.) instead of bouncing here.
+        label: return_target.label,
+        href: return_target.view_href,
+        // This page is a sub-flow of its caller — replace rather than push
+        // so back from the caller returns to wherever the user originally
+        // came from (cards page, spec page, etc.) instead of bouncing here.
         replace_state: true,
       },
     ]}

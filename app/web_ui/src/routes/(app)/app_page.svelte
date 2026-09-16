@@ -6,6 +6,11 @@
   export let subtitle: string = ""
   export let sub_subtitle: string = ""
   export let sub_subtitle_link: string | undefined = undefined
+  // An in-page action for the sub-subtitle, for a line that opens something on
+  // this page (a dialog) rather than navigating away. Takes precedence over
+  // sub_subtitle_link, which opens documentation in a new tab; a caller that
+  // passes both wants the action, since only one line renders.
+  export let sub_subtitle_action: (() => void) | undefined = undefined
   export let no_y_padding: boolean = false
   export let action_buttons: ActionButton[] = []
   export let limit_max_width: boolean = false
@@ -92,15 +97,21 @@
       <p class="text-base font-medium mt-1">{subtitle}</p>
     {/if}
     {#if sub_subtitle}
-      {#if sub_subtitle_link}
-        <p class="text-sm font-light mt-1">
+      <!-- One paragraph whatever the line does, so a caller cannot change the
+           header's typography by choosing an action over a link. -->
+      <p class="text-sm font-light mt-1">
+        {#if sub_subtitle_action}
+          <button class="link" on:click={sub_subtitle_action}>
+            {sub_subtitle}
+          </button>
+        {:else if sub_subtitle_link}
           <a href={sub_subtitle_link} class="link" target="_blank">
             {sub_subtitle}
           </a>
-        </p>
-      {:else}
-        <p class="text-sm font-light mt-1">{sub_subtitle}</p>
-      {/if}
+        {:else}
+          {sub_subtitle}
+        {/if}
+      </p>
     {/if}
   </div>
   <div class="flex flex-col md:flex-row gap-2 shrink-0">

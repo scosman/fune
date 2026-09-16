@@ -14,6 +14,7 @@
     acknowledgeDataGuideJob,
     type DataGuideJobRecord,
   } from "$lib/stores/data_guide_job_store"
+  import { with_data_guide_caller } from "$lib/utils/data_guide_return"
 
   // Show the most recently started job the user hasn't dismissed. There's
   // normally at most one in flight, but picking the newest keeps things sane if
@@ -31,7 +32,10 @@
   $: job = pick_job($data_guide_jobs)
 
   function spinner_link(j: DataGuideJobRecord): string {
-    return `/generate/${j.project_id}/${j.task_id}/data_guide_setup_copilot/${j.job_id}`
+    return with_data_guide_caller(
+      `/generate/${j.project_id}/${j.task_id}/data_guide_setup_copilot/${j.job_id}`,
+      j.caller ?? null,
+    )
   }
 
   // Hide while the user is already inside this job's setup flow (spinner, base

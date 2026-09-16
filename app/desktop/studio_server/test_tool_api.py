@@ -20,6 +20,7 @@ from kiln_ai.datamodel.tool_id import (
 )
 from kiln_ai.tools.mcp_session_manager import KilnMCPError
 from kiln_ai.utils.config import MCP_SECRETS_KEY
+from kiln_ai.utils.open_ai_types import TASK_RESPONSE_TOOL_NAME
 from kiln_server.custom_errors import connect_custom_errors
 from mcp.types import ListToolsResult, Tool
 
@@ -1054,6 +1055,59 @@ def test_code_eval_only_tool_ids_uses_the_shared_constant():
     )
 
 
+def test_web_ui_task_response_tool_name_matches_libs_core():
+    """The web UI's copy of the structured-answer tool name must match libs/core.
+
+    The chat trace and the claim evidence flattener both recognise the synthetic
+    `task_response` call by name, to show its arguments as the model's answer
+    rather than as a tool call. The name is not in the generated OpenAPI client,
+    so task_response_tool.ts hand-copies it. Renaming the tool on one side
+    without the other would silently show answers as tool calls, so fail here.
+    """
+    module = (
+        Path(__file__).resolve().parents[2]
+        / "web_ui"
+        / "src"
+        / "lib"
+        / "utils"
+        / "task_response_tool.ts"
+    )
+    assert module.is_file(), f"expected the web UI module at {module}"
+
+    declared = dict(re.findall(r'export const (\w+) = "([^"]+)"', module.read_text()))
+    assert declared == {"TASK_RESPONSE_TOOL_NAME": TASK_RESPONSE_TOOL_NAME}, (
+        f"task_response_tool.ts declares {declared} -- update it to match "
+        "TASK_RESPONSE_TOOL_NAME in kiln_ai.utils.open_ai_types."
+    )
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "lib/ui/trace/chat_trace.svelte",
+        "routes/(app)/specs/[project_id]/[task_id]/builder/claim_evidence.ts",
+    ],
+)
+def test_web_ui_task_response_consumers_use_the_shared_constant(relative_path):
+    """Each web consumer must import the guarded constant, not retype the name.
+
+    test_web_ui_task_response_tool_name_matches_libs_core only guards
+    task_response_tool.ts; a literal typed again in a consumer would sit outside
+    that guard.
+    """
+    source_file = Path(__file__).resolve().parents[2] / "web_ui" / "src" / relative_path
+    assert source_file.is_file(), f"expected the web UI source at {source_file}"
+    source = source_file.read_text()
+    assert (
+        'import { TASK_RESPONSE_TOOL_NAME } from "$lib/utils/task_response_tool"'
+        in source
+    ), f"{relative_path} does not import TASK_RESPONSE_TOOL_NAME"
+    assert '"task_response"' not in source, (
+        f"{relative_path} retypes the task_response literal instead of using "
+        "TASK_RESPONSE_TOOL_NAME"
+    )
+
+
 async def test_create_tool_server_whitespace_handling(
     client, test_project, mock_mcp_validation
 ):
@@ -1659,6 +1713,8 @@ async def test_create_local_tool_server_list_tools_failed(client, test_project):
 
 
 # Tests for tool_server_from_id function
+
+
 def test_tool_server_from_id_success(test_project):
     """Test tool_server_from_id returns correct tool server when found"""
 

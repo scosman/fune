@@ -1,0 +1,8 @@
+{
+  "method": "delete",
+  "path": "/api/projects/{project_id}/tasks/{task_id}/eval_inputs/{eval_input_id}",
+  "agent_policy": {
+    "permission": "deny",
+    "requires_approval": false
+  }
+}

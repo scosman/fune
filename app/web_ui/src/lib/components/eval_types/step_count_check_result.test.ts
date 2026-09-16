@@ -26,17 +26,17 @@ describe("StepCountCheckResult", () => {
     expect(container).toBeTruthy()
   })
 
-  it("shows Pass badge when match score is 1.0", () => {
+  it("shows Pass badge when the score is 1.0", () => {
     const { container } = render(StepCountCheckResult, {
-      props: { scores: { match: 1.0 }, eval_config: makeConfig() },
+      props: { scores: { within_bounds: 1.0 }, eval_config: makeConfig() },
     })
     expect(container.textContent).toContain("Pass")
     expect(container.querySelector(".badge-success")).toBeTruthy()
   })
 
-  it("shows Fail badge when match score is 0.0", () => {
+  it("shows Fail badge when the score is 0.0", () => {
     const { container } = render(StepCountCheckResult, {
-      props: { scores: { match: 0.0 }, eval_config: makeConfig() },
+      props: { scores: { within_bounds: 0.0 }, eval_config: makeConfig() },
     })
     expect(container.textContent).toContain("Fail")
     expect(container.querySelector(".badge-error")).toBeTruthy()
@@ -56,7 +56,7 @@ describe("StepCountCheckResult", () => {
   it("shows tool_calls count type label", () => {
     const { container } = render(StepCountCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { within_bounds: 1.0 },
         eval_config: makeConfig({ count_type: "tool_calls" }),
       },
     })
@@ -66,7 +66,7 @@ describe("StepCountCheckResult", () => {
   it("shows model_responses count type label", () => {
     const { container } = render(StepCountCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { within_bounds: 1.0 },
         eval_config: makeConfig({ count_type: "model_responses" }),
       },
     })
@@ -76,7 +76,7 @@ describe("StepCountCheckResult", () => {
   it("shows turns count type label", () => {
     const { container } = render(StepCountCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { within_bounds: 1.0 },
         eval_config: makeConfig({ count_type: "turns" }),
       },
     })
@@ -86,7 +86,7 @@ describe("StepCountCheckResult", () => {
   it("shows range when both min and max are set", () => {
     const { container } = render(StepCountCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { within_bounds: 1.0 },
         eval_config: makeConfig({ min_count: 2, max_count: 10 }),
       },
     })
@@ -96,7 +96,7 @@ describe("StepCountCheckResult", () => {
   it("shows 'at least N' when only min is set", () => {
     const { container } = render(StepCountCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { within_bounds: 1.0 },
         eval_config: makeConfig({ min_count: 3, max_count: null }),
       },
     })
@@ -106,7 +106,7 @@ describe("StepCountCheckResult", () => {
   it("shows 'at most N' when only max is set", () => {
     const { container } = render(StepCountCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { within_bounds: 1.0 },
         eval_config: makeConfig({ min_count: null, max_count: 7 }),
       },
     })
@@ -116,7 +116,7 @@ describe("StepCountCheckResult", () => {
   it("shows 'any' when neither min nor max is set", () => {
     const { container } = render(StepCountCheckResult, {
       props: {
-        scores: { match: 1.0 },
+        scores: { within_bounds: 1.0 },
         eval_config: makeConfig({ min_count: null, max_count: null }),
       },
     })
@@ -125,17 +125,17 @@ describe("StepCountCheckResult", () => {
 
   it("shows scores via EvalResultScores", () => {
     const { container } = render(StepCountCheckResult, {
-      props: { scores: { match: 0.0 } },
+      props: { scores: { within_bounds: 0.0 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("within_bounds:")
     expect(container.textContent).toContain("0.00")
   })
 
   it("does not show config details when eval_config is null", () => {
     const { container } = render(StepCountCheckResult, {
-      props: { scores: { match: 1.0 } },
+      props: { scores: { within_bounds: 1.0 } },
     })
-    expect(container.textContent).toContain("match:")
+    expect(container.textContent).toContain("within_bounds:")
     expect(container.textContent).not.toContain("Counting:")
     expect(container.textContent).not.toContain("Allowed range:")
   })

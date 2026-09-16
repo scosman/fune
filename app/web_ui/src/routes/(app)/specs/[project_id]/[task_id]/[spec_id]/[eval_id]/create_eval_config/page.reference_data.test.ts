@@ -373,6 +373,64 @@ describe("Reference data save gate", () => {
       expect(mockCreateLlmJudgeConfig).not.toHaveBeenCalled()
       expect(mockCreateEvalConfig).not.toHaveBeenCalled()
     })
+
+    it("an edit while a reference_data test is in flight does not count as tested", async () => {
+      setInitialLlmJudgeValues({
+        selected_algo: "llm_as_judge",
+        combined_model_name: "openai:gpt-4o",
+        model_name: "gpt-4o",
+        provider_name: "openai",
+        // reference_data in the prompt makes the test-before-save gate apply.
+        judge_prompt: "Grade against {{ reference_data.expected }}.",
+      })
+
+      const { container } = await renderBuilder("llm_judge")
+
+      await tick()
+      await new Promise((r) => setTimeout(r, 0))
+      await tick()
+
+      // Hold the test in flight so we can edit before it resolves.
+      let resolveTest: (v: unknown) => void = () => {}
+      mockTestV2EvalLlmJudge.mockReturnValueOnce(
+        new Promise((r) => {
+          resolveTest = r
+        }),
+      )
+
+      await fireEvent.click(
+        container.querySelector(
+          '[data-testid="run-test-btn"]',
+        ) as HTMLButtonElement,
+      )
+      await tick()
+
+      // Edit while the request is in flight.
+      const formStub = container.querySelector(
+        '[data-testid="llm-judge-form-stub"]',
+      ) as HTMLElement
+      await fireEvent.input(formStub)
+      await tick()
+
+      resolveTest({ scores: { score: 1.0 }, skipped_reason: null })
+      await tick()
+      await new Promise((r) => setTimeout(r, 0))
+      await tick()
+
+      resetCalls()
+      await fireEvent.click(
+        container.querySelector(
+          '[data-testid="column-save-button"]',
+        ) as HTMLButtonElement,
+      )
+      await tick()
+      await new Promise((r) => setTimeout(r, 0))
+      await tick()
+
+      // The edited config was never tested, so the reference-data gate blocks it.
+      expect(showCalls).toContain("Test Required")
+      expect(mockCreateLlmJudgeConfig).not.toHaveBeenCalled()
+    })
   })
 
   describe("reference_keys on save", () => {

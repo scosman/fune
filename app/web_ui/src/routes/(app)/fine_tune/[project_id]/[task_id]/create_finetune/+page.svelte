@@ -12,6 +12,7 @@
   import PromptTypeSelector from "$lib/ui/run_config_component/prompt_type_selector.svelte"
   import {
     fine_tune_target_model as model_provider,
+    load_task,
     current_task,
   } from "$lib/stores"
   import {
@@ -58,6 +59,10 @@
     name: "Create Fine-Tune",
     description: `Create a new fine-tuning job for project ID ${project_id}, task ID ${task_id}. Configure model, data strategy, and training parameters.`,
   })
+
+  let task: Task | null = null
+  let task_error: KilnError | null = null
+  $: is_multiturn = task?.turn_mode === "multiturn"
 
   let run_config_component: RunConfigComponent | null = null
 
@@ -241,6 +246,22 @@
 
   onMount(async () => {
     get_available_models()
+    // Catch the load: an uncaught rejection would leave task === null and spin
+    // the "task === null" loader forever (e.g. a deleted or inaccessible task).
+    load_task(project_id, task_id)
+      .then((loaded) => {
+        task = loaded
+      })
+      .catch((e) => {
+        if (e instanceof Error && e.message.includes("Load failed")) {
+          task_error = new KilnError(
+            "Could not load task. This task may belong to a project you don't have access to.",
+            null,
+          )
+        } else {
+          task_error = createKilnError(e)
+        }
+      })
 
     // Initialize IndexedDB-backed store for state persistence
     const state_key = `create_finetune_state_${project_id}_${task_id}`
@@ -735,9 +756,26 @@
       },
     ]}
   >
-    {#if $available_models_loading}
+    {#if $available_models_loading || (task === null && !task_error)}
       <div class="w-full min-h-[50vh] flex justify-center items-center">
         <div class="loading loading-spinner loading-lg"></div>
+      </div>
+    {:else if task_error}
+      <div
+        class="w-full min-h-[50vh] flex flex-col justify-center items-center gap-2"
+      >
+        <div class="font-medium">Error Loading Task</div>
+        <div class="text-error text-sm">
+          {task_error.getMessage() || "An unknown error occurred"}
+        </div>
+      </div>
+    {:else if is_multiturn}
+      <div class="flex flex-col items-center justify-center min-h-[60vh]">
+        <Warning
+          warning_message="Fine-tuning is not supported for multi-turn tasks."
+          warning_color="warning"
+          warning_icon="info"
+        />
       </div>
     {:else if created_finetune}
       <Completed
@@ -786,7 +824,7 @@
               warning_message="For 1-click fine-tuning connect Fireworks, Together, or Google Vertex."
               warning_icon="info"
               warning_color="success"
-              tight={true}
+              inline={true}
             />
           </button>
         </div>

@@ -10,10 +10,7 @@ from kiln_ai.adapters.adapter_registry import (
     load_skills_from_tool_ids,
 )
 from kiln_ai.adapters.fine_tune.base_finetune import FineTuneParameter, FineTuneStatus
-from kiln_ai.adapters.fine_tune.dataset_formatter import (
-    DatasetFormat,
-    DatasetFormatter,
-)
+from kiln_ai.adapters.fine_tune.dataset_formatter import DatasetFormat, DatasetFormatter
 from kiln_ai.adapters.fine_tune.finetune_registry import finetune_registry
 from kiln_ai.adapters.fine_tune.fireworks_finetune import (
     FIREWORKS_SUPPORTED_FINETUNE_MODELS,
@@ -30,13 +27,12 @@ from kiln_ai.adapters.prompt_builders import (
     prompt_builder_from_id,
 )
 from kiln_ai.adapters.provider_tools import provider_enabled, provider_name_from_id
-from kiln_ai.datamodel import (
-    DatasetSplit,
-    Finetune,
-    FineTuneStatusType,
-    Task,
+from kiln_ai.datamodel import DatasetSplit, Finetune, FineTuneStatusType, Task
+from kiln_ai.datamodel.datamodel_enums import (
+    THINKING_DATA_STRATEGIES,
+    ChatStrategy,
+    TurnMode,
 )
-from kiln_ai.datamodel.datamodel_enums import THINKING_DATA_STRATEGIES, ChatStrategy
 from kiln_ai.datamodel.dataset_filters import (
     DatasetFilterId,
     HighRatingDatasetFilter,
@@ -604,6 +600,11 @@ def connect_fine_tune_api(app: FastAPI):
         request: CreateFinetuneRequest,
     ) -> Finetune:
         task = task_from_id(project_id, task_id)
+        if task.turn_mode == TurnMode.multiturn:
+            raise HTTPException(
+                status_code=400,
+                detail="Fine-tuning is not supported for multi-turn tasks.",
+            )
         if request.provider not in finetune_registry:
             raise HTTPException(
                 status_code=400,
@@ -712,6 +713,11 @@ def connect_fine_tune_api(app: FastAPI):
         data_strategy_typed = ChatStrategy(data_strategy)
 
         task = task_from_id(project_id, task_id)
+        if task.turn_mode == TurnMode.multiturn:
+            raise HTTPException(
+                status_code=400,
+                detail="Fine-tuning is not supported for multi-turn tasks.",
+            )
         dataset = DatasetSplit.from_id_and_parent_path(dataset_id, task.path)
         if dataset is None:
             raise HTTPException(

@@ -1,9 +1,12 @@
+import pytest
+
 from kiln_ai.adapters.chat import ChatStrategy, get_chat_formatter
 from kiln_ai.adapters.chat.chat_formatter import (
     COT_FINAL_ANSWER_PROMPT,
     MultiturnFormatter,
     SingleTurnR1ThinkingFormatter,
     format_user_message,
+    is_two_message_cot_strategy,
 )
 
 
@@ -263,109 +266,31 @@ def test_simple_prompt_builder_structured_input_non_ascii():
     assert "你好👋" in user_msg
 
 
-# ── SingleTurnR1ThinkingFormatter: forward_thinking_instructions ──────
-
-
-def test_r1_thinking_forward_true():
-    """forward_thinking_instructions=True wraps plain input in <user_input> tags."""
-    f = SingleTurnR1ThinkingFormatter(
-        system_message="sys",
-        user_input="hello",
-        thinking_instructions="Think carefully.",
-        forward_thinking_instructions=True,
-    )
-    turn = f.next_turn()
-    assert turn is not None
-    user_msg = turn.messages[1].content
-    assert "<user_input>" in user_msg
-    assert "hello" in user_msg
-    assert "Think carefully." in user_msg
-
-
-def test_r1_thinking_forward_false_default():
-    """Default forward_thinking_instructions=False drops thinking_instructions."""
-    f = SingleTurnR1ThinkingFormatter(
-        system_message="sys",
-        user_input="hello",
-        thinking_instructions="Think carefully.",
-        forward_thinking_instructions=False,
-    )
-    import warnings
-
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        turn = f.next_turn()
-        assert len(w) == 1
-        assert issubclass(w[0].category, DeprecationWarning)
-        assert "forward_thinking_instructions" in str(w[0].message)
-    assert turn is not None
-    user_msg = turn.messages[1].content
-    assert user_msg == "hello"
-    assert "Think carefully." not in user_msg
-
-
-def test_r1_thinking_forward_conversation_history():
-    """When formatted contains <conversation_history>, no <user_input> wrapper is added."""
-    input_with_history = (
-        "<conversation_history>prior chat</conversation_history>\nWhat now?"
-    )
-    f = SingleTurnR1ThinkingFormatter(
-        system_message="sys",
-        user_input=input_with_history,
-        thinking_instructions="Evaluate quality.",
-        forward_thinking_instructions=True,
-    )
-    turn = f.next_turn()
-    assert turn is not None
-    user_msg = turn.messages[1].content
-    assert "<user_input>" not in user_msg
-    assert "<conversation_history>" in user_msg
-    assert "Evaluate quality." in user_msg
-
-
-def test_r1_thinking_forward_no_instructions():
-    """When thinking_instructions is None, user_input is used as-is regardless of flag."""
-    f = SingleTurnR1ThinkingFormatter(
-        system_message="sys",
-        user_input="plain",
-        thinking_instructions=None,
-        forward_thinking_instructions=True,
-    )
-    turn = f.next_turn()
-    assert turn is not None
-    user_msg = turn.messages[1].content
-    assert user_msg == "plain"
-
-
-def test_r1_thinking_deprecation_warning():
-    """Deprecation warning fires when thinking_instructions present but forward=False."""
-    import warnings
-
-    f = SingleTurnR1ThinkingFormatter(
-        system_message="sys",
-        user_input="input",
-        thinking_instructions="instructions",
-        forward_thinking_instructions=False,
-    )
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        f.next_turn()
-        assert any(issubclass(x.category, DeprecationWarning) for x in w)
-
-
-def test_get_chat_formatter_r1_passes_thinking_instructions():
-    """get_chat_formatter passes forward_thinking_instructions to R1 formatter."""
-    from kiln_ai.adapters.chat import ChatStrategy
-
+def test_get_chat_formatter_r1_drops_thinking_instructions():
+    """R1-style models emit their own thinking: thinking_instructions passed
+    for other strategies are deliberately not injected into the prompt."""
     formatter = get_chat_formatter(
         strategy=ChatStrategy.single_turn_r1_thinking,
         system_message="sys",
         user_input="test",
         thinking_instructions="Think.",
-        forward_thinking_instructions=True,
     )
     assert isinstance(formatter, SingleTurnR1ThinkingFormatter)
-    assert formatter.forward_thinking_instructions is True
     turn = formatter.next_turn()
     assert turn is not None
-    assert "Think." in turn.messages[1].content
+    assert turn.messages[1].content == "test"
+
+
+@pytest.mark.parametrize(
+    "strategy, expected",
+    [
+        # Both chain of thought strategies inject a second user-role message asking for
+        # the final answer, so a turn is not one user message and one assistant reply.
+        (ChatStrategy.two_message_cot, True),
+        (ChatStrategy.two_message_cot_legacy, True),
+        (ChatStrategy.single_turn, False),
+        (ChatStrategy.single_turn_r1_thinking, False),
+    ],
+)
+def test_is_two_message_cot_strategy(strategy: ChatStrategy, expected: bool):
+    assert is_two_message_cot_strategy(strategy) is expected

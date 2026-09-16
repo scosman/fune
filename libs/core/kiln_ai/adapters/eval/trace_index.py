@@ -13,9 +13,12 @@ what makes a retry after a scoring failure re-score rather than regenerate
 (functional spec §4.2, §4.3).
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Awaitable, Callable, Dict, Tuple
+
+from pydantic import ValidationError
 
 from kiln_ai.datamodel.basemodel import ID_TYPE
 from kiln_ai.datamodel.eval_splits import ItemKey, ItemSource
@@ -71,10 +74,20 @@ class TraceIndex:
 
     Runner-owned and single-run-scoped: seeded once from disk at construction, then kept
     current by every trace it hands out.
+
+    `vet` is the caller's veto over reuse: it decides whether a candidate record is fit to
+    serve a key, which is knowledge the index does not have (a conversation's completeness
+    depends on the item asking for it). It answers None for a fit record, or a reason
+    string for an unfit one — the reason travels with the rejection so the index's own log
+    line carries it, rather than stranding it in a separate line the caller emitted. A
+    `vet` of None reuses on key identity alone.
     """
 
-    def __init__(self, task: Task):
+    def __init__(
+        self, task: Task, vet: Callable[[TraceKey, TaskRun], str | None] | None = None
+    ):
         self._task = task
+        self._vet = vet
         # Paths, not TaskRuns. Reloading is what keeps a handed-out trace honest: it
         # re-reads the record (ModelCache validates on path + mtime), so an index built
         # early in a long eval never serves a stale object, and it stays correct across
@@ -89,10 +102,13 @@ class TraceIndex:
 
     def _seed(self) -> None:
         # include_intermediate_runs stays False, so a trace that is the *parent* of
-        # another run is invisible here. Safe only because architecture §3.2 skips
-        # multi-turn items outright, so no eval trace has children today. If multi-turn
-        # evals ever generate traces, this line has to change with them — otherwise those
-        # traces are never found and the eval regenerates them on every run, silently.
+        # another run is invisible here. Safe because eval traces are always
+        # childless: single-turn generations are single runs, and a driven
+        # multi-turn conversation persists as one standalone run whose trace holds
+        # the whole exchange (chain-leaf scoring reads stored dataset runs without
+        # generating at all). Nothing may ever chain a child onto an eval trace
+        # without revisiting this seed — the parent would turn invisible here, and
+        # the eval would silently regenerate its trace on every run.
         for run in self._task.runs(readonly=True, include_eval_generated=True):
             if run.path is None:
                 continue
@@ -101,8 +117,22 @@ class TraceIndex:
                 # Not an eval trace, or missing half its key — either way, no job can
                 # ever match it.
                 continue
-            # First wins (D8). Sync means two machines can each have generated a trace
-            # for the same key; nothing here creates a second, and either is correct.
+            rejection = self._vet_rejection(key, run)
+            if rejection is not None:
+                # Skipped rather than indexed, so a fit candidate later in the scan can
+                # still serve this key — an unfit file must not shadow a good one. The
+                # file itself is left alone; this line is the only consequence. Info, not
+                # warning: a rejected file stays on disk and is re-seen on every seed.
+                logger.info(
+                    "Not indexing eval trace at %s for %s: it failed vetting (%s)",
+                    run.path,
+                    key,
+                    rejection,
+                )
+                continue
+            # First fit wins (D8). Sync means two machines can each have generated a
+            # trace for the same key; nothing here creates a second, and either is
+            # correct.
             self._paths.setdefault(key, run.path)
 
     async def get_or_create(
@@ -146,6 +176,18 @@ class TraceIndex:
             )
             del self._paths[key]
             return None
+        except (json.JSONDecodeError, ValidationError, ValueError) as error:
+            # The file exists but no longer parses as a TaskRun — truncated by a crash
+            # mid-write, or rewritten by a newer schema. Same posture as a missing file:
+            # drop the entry and regenerate, rather than failing every job on this key.
+            logger.warning(
+                "Indexed eval trace for %s at %s failed to load (%s); regenerating",
+                key,
+                path,
+                error,
+            )
+            del self._paths[key]
+            return None
 
         # The write path's check, applied on read. Entries only enter `_paths` verified,
         # so this fires only if the file changed identity after it was indexed — sync
@@ -162,7 +204,47 @@ class TraceIndex:
             )
             del self._paths[key]
             return None
+
+        # Re-vetted on every serve, not just at seed: an indexed file can be replaced
+        # after it was accepted (sync again), and an entry that was fit once is not
+        # evidence it still is. Same degrade-don't-cascade posture as the checks above —
+        # drop the entry and regenerate rather than failing the job.
+        rejection = self._vet_rejection(key, trace)
+        if rejection is not None:
+            logger.warning(
+                "Indexed eval trace at %s failed vetting for %s (%s); regenerating",
+                path,
+                key,
+                rejection,
+            )
+            del self._paths[key]
+            return None
         return trace
+
+    def _vet_rejection(self, key: TraceKey, run: TaskRun) -> str | None:
+        """Why the caller's vet refuses `run` as the trace for `key`, or None if it
+        accepts.
+
+        The reason comes back rather than a bare verdict so the index can put it in the
+        line that names the file. The vet is the only thing that knows why, and a reason
+        logged separately by the caller is invisible wherever the log level starts at
+        warnings.
+
+        A vet that raises counts as a rejection: a broken predicate must cost a
+        regeneration, not take down every job that wanted this key.
+        """
+        if self._vet is None:
+            return None
+        try:
+            return self._vet(key, run)
+        except Exception as error:
+            logger.warning(
+                "Vetting the eval trace at %s for %s raised (%s); treating it as unusable",
+                run.path,
+                key,
+                error,
+            )
+            return f"vetting raised {error}"
 
     def _generated_path(self, key: TraceKey, run: TaskRun) -> Path:
         """Where a freshly generated trace was persisted, once it has earned indexing.

@@ -376,7 +376,7 @@
         <div class="pt-4">
           <Warning
             warning_message="Existing tuning data won't work as it wasn't generated with the tools you've selected. Please generate new fine-tuning data with these tools."
-            tight={true}
+            inline={true}
             warning_color="gray"
             warning_icon="info"
             large_icon={true}
@@ -387,7 +387,7 @@
           <Warning
             warning_message="Existing tuning datasets do not match your selected tools. Please
           create new dataset for training with tool calls or add additional fine-tuning data before you start."
-            tight={true}
+            inline={true}
             warning_color="gray"
             warning_icon="info"
             large_icon={true}

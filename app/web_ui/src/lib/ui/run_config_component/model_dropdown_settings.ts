@@ -14,5 +14,23 @@ export interface ModelDropdownSettings {
     | "evals"
     | "uncensored_data_gen"
     | "doc_extraction"
+    | "synthetic_user"
     | null
+}
+
+// Whether the "we suggest a Recommended model" advisory renders under a model
+// dropdown.
+//
+// `suggestion_known` is false while the model list is still loading: until it
+// arrives, a chosen model reads as "not suggested" whatever it really is. Every
+// caller waits that out rather than flash an amber warning that turns green a
+// moment later and shifts the rows under it.
+export function show_suggested_advisory(
+  model_selected: boolean,
+  suggestion_known: boolean,
+): boolean {
+  if (model_selected && !suggestion_known) {
+    return false
+  }
+  return true
 }

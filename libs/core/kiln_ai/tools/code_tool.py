@@ -102,7 +102,9 @@ class PythonCodeTool(KilnToolInterface):
         tool_name = self._code_tool.tool_function_name
         if outcome.timed_out:
             msg = f"Code tool '{tool_name}' timed out after {self._code_tool.timeout_seconds}s"
-            return ToolCallResult(output=msg, is_error=True, error_message=msg)
+            return ToolCallResult(
+                output=msg, is_error=True, error_message=msg, timed_out=True
+            )
         if outcome.crashed:
             msg = outcome.crash_description(f"Code tool '{tool_name}'")
             return ToolCallResult(output=msg, is_error=True, error_message=msg)

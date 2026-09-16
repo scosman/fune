@@ -11,7 +11,12 @@
   export let sub_subtitle: string | null = null
   export let sub_subtitle_link: string | null = null
   export let blur_background: boolean = false
-  export let width: "normal" | "wide" = "normal"
+  // Dialog width. "extra_wide" is for content that reads as a full page in
+  // miniature (a whole conversation), where 3xl forces constant wrapping.
+  // Dialogs rendered INSIDE another dialog's content are display:none while
+  // closed (app.css .modal-box rule) — closed nested overlays otherwise
+  // inflate the outer box's scroll area via its permanent transform.
+  export let width: "normal" | "wide" | "extra_wide" = "normal"
   const id: string = "dialog-" + Math.random().toString(36)
   type ActionButton = {
     label: string
@@ -90,12 +95,14 @@
   on:cancel={(e) => dispatch("cancel", e)}
 >
   <div
-    class="modal-box text-base-content {width === 'wide'
-      ? 'w-11/12 max-w-3xl'
-      : ''}"
+    class="modal-box text-base-content {width === 'extra_wide'
+      ? 'w-11/12 max-w-7xl'
+      : width === 'wide'
+        ? 'w-11/12 max-w-3xl'
+        : ''}"
   >
     <!-- Hidden div to force the compiler to find these classes -->
-    <div class="hidden w-11/12 max-w-3xl"></div>
+    <div class="hidden w-11/12 max-w-3xl max-w-7xl"></div>
     <div class="flex flex-row gap-2 items-start">
       <div
         class="grow flex flex-col {center_content

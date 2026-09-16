@@ -220,7 +220,7 @@ def test_structured_output_workflow(tmp_path):
 
     assert loaded_task.name == "Structured Output Task"
     assert len(loaded_task.requirements) == 2
-    loaded_runs = loaded_task.runs()
+    loaded_runs = loaded_task.runs(include_intermediate_runs=True)
     assert len(loaded_runs) == 5
 
     for task_run in loaded_runs:

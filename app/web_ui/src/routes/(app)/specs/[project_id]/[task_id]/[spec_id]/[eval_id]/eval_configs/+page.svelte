@@ -642,7 +642,7 @@
               <Warning
                 warning_message={`There are only ${score_summary.dataset_size} item(s) in your Golden Dataset. This is generally too small to get a sense of how judges perform.`}
                 warning_color="warning"
-                tight={true}
+                inline={true}
               />
             </div>
           {/if}
@@ -707,7 +707,7 @@
           <div class="mt-6 mb-4">
             <Warning
               warning_message={`There are issues you should resolve before analyzing this data.`}
-              tight={true}
+              inline={true}
             />
             <ul class="list-disc list-inside text-sm text-gray-500 pl-2 pt-2">
               {#each incomplete_warning(score_summary, comparable_configs) as warning}
@@ -722,7 +722,7 @@
               warning_color={focus_select_eval_config ? "primary" : "gray"}
               warning_icon={focus_select_eval_config ? "exclaim" : "info"}
               large_icon={focus_select_eval_config}
-              tight={true}
+              inline={true}
             />
           </div>
         {/if}
@@ -777,7 +777,7 @@
                         <Warning
                           warning_message="This judge requires reference data, which is not populated. It can't be run or compared here."
                           warning_color="warning"
-                          tight={true}
+                          inline={true}
                           text_size="xs"
                         />
                       </div>

@@ -19,17 +19,28 @@
     clearDataGuideJob,
   } from "$lib/stores/data_guide_job_store"
   import { pending_data_guide_draft } from "../pending_draft_store"
+  import {
+    data_guide_return,
+    read_data_guide_caller,
+    with_data_guide_caller,
+  } from "$lib/utils/data_guide_return"
 
   $: project_id = $page.params.project_id!
   $: task_id = $page.params.task_id!
   $: job_id = $page.params.job_id!
+  // Which page opened the setup chain (no key means synthetic data
+  // generation): every link out of here forwards it, and the breadcrumb and
+  // the finish action return to it.
+  $: caller = read_data_guide_caller($page.url.searchParams)
+  $: return_target = data_guide_return(caller, project_id, task_id)
   $: agentInfo.set({
     name: "Set Up Data Guide",
     description: `Drafting the input data guide for project ${project_id}, task ${task_id}.`,
   })
 
-  const base_url = () =>
+  const base_path = () =>
     `/generate/${project_id}/${task_id}/data_guide_setup_copilot`
+  const base_url = () => with_data_guide_caller(base_path(), caller)
 
   // Guards against double-handling a terminal status (the reactive block can
   // fire more than once before navigation completes).
@@ -61,7 +72,9 @@
       handled = true
       // Drop back to the input page; it re-seeds the examples from the record
       // and shows the error, then clears the record.
-      goto(`${base_url()}?draft_failed=1`, { replaceState: true })
+      goto(with_data_guide_caller(`${base_path()}?draft_failed=1`, caller), {
+        replaceState: true,
+      })
     }
   }
 
@@ -115,8 +128,8 @@
     subtitle="Your Data Guide will help us generate better synthetic inputs."
     breadcrumbs={[
       {
-        label: "Synthetic Data Generation",
-        href: `/generate/${project_id}/${task_id}/synth?session_continued=true`,
+        label: return_target.label,
+        href: return_target.href,
         replace_state: true,
       },
     ]}

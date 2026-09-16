@@ -16,6 +16,7 @@ export type ActionButton = {
 // Project-Input is a variant with path
 export type Project = components["schemas"]["Project-Input"]
 export type Task = components["schemas"]["Task"]
+export type TurnMode = components["schemas"]["TurnMode"]
 export type TaskRun = components["schemas"]["TaskRun-Input"]
 export type TaskRunOutput = components["schemas"]["TaskRun-Output"]
 export type TaskRequirement = components["schemas"]["TaskRequirement"]
@@ -139,6 +140,7 @@ export type Trace = TraceMessage[]
 export type ErrorWithTrace = components["schemas"]["ErrorWithTrace"]
 export type ToolCallMessageParam =
   components["schemas"]["ChatCompletionMessageFunctionToolCallParam"]
+export type RunChainEntry = components["schemas"]["RunChainEntry"]
 export type SearchToolApiDescription =
   components["schemas"]["SearchToolApiDescription"]
 export type CodeToolResponse = components["schemas"]["CodeToolResponse"]

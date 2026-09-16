@@ -3,6 +3,7 @@ from typing import Annotated
 
 import httpx
 from fastapi import FastAPI, HTTPException, Path
+from kiln_ai.synthetic_user.runner import NUM_CASES_MAX
 from kiln_server.task_api import task_from_id
 from kiln_server.utils.agent_checks.policy import agent_policy_require_approval
 from pydantic import BaseModel, Field
@@ -36,7 +37,9 @@ class BatchPlanApiInput(BaseModel):
     count: int = Field(
         description="Number of inputs to plan — the planner returns one prompt per input.",
         ge=1,
-        le=200,
+        # One planned input becomes one run, so this shares the batch budget
+        # the drive lanes enforce rather than carrying its own number.
+        le=NUM_CASES_MAX,
     )
     data_guide: str | None = Field(
         default=None,

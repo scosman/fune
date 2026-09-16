@@ -209,10 +209,12 @@
     {#if show_auth_form}
       <div class="mt-3 border-t pt-3">
         {#if is_system_keys}
-          <Warning
-            warning_message="This repo was connected via system SSH keys. Either fix your SSH key connection to your git provider, or remove this project and re-add it with another auth mechanism like tokens."
-            warning_color="warning"
-          />
+          <div class="mt-2">
+            <Warning
+              warning_message="This repo was connected via system SSH keys. Either fix your SSH key connection to your git provider, or remove this project and re-add it with another auth mechanism like tokens."
+              warning_color="warning"
+            />
+          </div>
         {:else if is_github && mode === "oauth" && oauth_flow}
           {#if oauth.needs_install}
             <OAuthInstallStep
@@ -224,7 +226,7 @@
             />
           {:else}
             {#if oauth.oauth_error}
-              <div class="mb-3">
+              <div class="mt-2 mb-3">
                 <Warning
                   warning_message={oauth.oauth_error}
                   warning_color="error"

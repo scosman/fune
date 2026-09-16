@@ -402,6 +402,22 @@ of the split that needs it. *Rough guidance:* eval-level is probably right — t
 hold the synthetic user constant across run configs so a comparison varies only the agent, and that
 argument is about the eval, not the split. But nobody has actually asked the question.
 
+**2026-08-14 update: the question was asked, and the answer is neither eval-level nor split-level —
+it is per item.** The drive config now lives on `MultiTurnSyntheticEvalInputData.drive_config`,
+stamped at mint, and `Eval.multi_turn_drive_config` is removed. The constancy argument above survives
+intact: for any given item the synthetic user is still held constant across every run config and every
+eval that references it — item-to-item variation was never the contamination concern (personas already
+vary per item). What per-item placement adds is self-containedness: each item carries everything needed
+to re-drive it identically (persona, first message, synthetic-user model, turns), which is what makes
+conversation traces reusable across evals keyed by item id. The rough guidance's dichotomy was simply
+too coarse. Consequences for the mechanics this section flagged: multi-turn detection now keys on the
+split items' *type* rather than "eval has a drive config", so the per-split translation question
+dissolves (a `TaskRun`-backed split contains no such items and no-ops for free); readiness reads the
+split's items and fails up front only when *no* item carries a config; and
+`SkippedReason.missing_drive_config` plus its recoverable-tombstone logic are per-item — the tombstone
+recovers when the item it names carries a config, and items are immutable once minted, so recovery in
+practice means a replacement batch.
+
 ### 10. Surfaces that arrive with the merge
 
 Mostly not conflicts — code that does not exist on eb-v2 and lands with the merge. The last bullet is
@@ -567,7 +583,8 @@ Areas most likely to break quietly:
    directly?** (§4) The shipped factory exists so construction and split-homing cannot be separated;
    eb-v2's path carries four things the factory does not know about.
 3. **Which ref does alignment happen on**, and what happens to the three review branches afterwards?
-4. **Does `multi_turn_drive_config` stay eval-level?** (§9)
+4. ~~**Does `multi_turn_drive_config` stay eval-level?**~~ — settled 2026-08-14: it becomes per-item
+   on `MultiTurnSyntheticEvalInputData` and the eval-level field is removed (§9's dated update).
 5. **Does eb-v2's defensive `EvalInput` + `eval_config_eval` branch survive**, or does `EvalJob` become
    unable to express the combination? (§12)
 6. ~~**Is `specs/projects/eval_copilot_builder_v2` describing this same line?**~~ — checked, and it is

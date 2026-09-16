@@ -8,7 +8,9 @@ from kiln_ai.datamodel.datamodel_enums import (
     ModelProviderName,
     StructuredOutputMode,
     TaskOutputRatingType,
+    TurnMode,
 )
+from kiln_ai.datamodel.model_cache import ModelCache
 from kiln_ai.datamodel.project import Project
 from kiln_ai.datamodel.prompt_id import PromptGenerators
 from kiln_ai.datamodel.run_config import KilnAgentRunConfigProperties
@@ -19,8 +21,12 @@ from kiln_ai.datamodel.spec_properties import (
     ToxicityProperties,
 )
 from kiln_ai.datamodel.task import Task, TaskRunConfig
-from kiln_ai.datamodel.task_output import TaskOutput, normalize_rating
+from kiln_ai.datamodel.task_output import (
+    TaskOutput,
+    normalize_rating,
+)
 from kiln_ai.datamodel.task_run import EvalItemSource, TaskRun
+from kiln_ai.datamodel.test_json_schema import json_joke_schema
 
 
 def test_runconfig_valid_creation():
@@ -528,6 +534,7 @@ def test_taskrun_parent_task_run_id_persists_on_load(tmp_path):
         name="Test Task",
         instruction="Test instruction",
         path=tmp_path / "task.kiln",
+        turn_mode=TurnMode.multiturn,
     )
     task.save_to_file()
 
@@ -590,6 +597,7 @@ def test_multiple_runs_flat_under_task_with_parent_task_run_chain(tmp_path):
         name="Test Task",
         instruction="Test instruction",
         path=tmp_path / "task.kiln",
+        turn_mode=TurnMode.multiturn,
     )
     task.save_to_file()
 
@@ -754,11 +762,137 @@ def test_is_toolcall_pending_true_when_task_response_mixed_with_unmanaged_tools(
     )
 
 
-def _make_task_for_runs_tests(tmp_path) -> Task:
+def test_task_turn_mode_defaults_to_single_turn():
+    task = Task(name="Test Task", instruction="Test instruction")
+    assert task.turn_mode == TurnMode.single_turn
+
+
+def test_task_loads_legacy_json_without_turn_mode_as_single_turn():
+    legacy_data = {
+        "v": 1,
+        "name": "Legacy Task",
+        "instruction": "Legacy instruction",
+        "model_type": "task",
+    }
+
+    parsed = Task.model_validate(legacy_data, context={"loading_from_file": True})
+    assert parsed.turn_mode == TurnMode.single_turn
+
+    parsed_no_context = Task.model_validate(legacy_data)
+    assert parsed_no_context.turn_mode == TurnMode.single_turn
+
+
+def test_task_multiturn_rejects_input_json_schema():
+    with pytest.raises(ValidationError, match="structured input"):
+        Task(
+            name="Multiturn Task",
+            instruction="Test instruction",
+            turn_mode=TurnMode.multiturn,
+            input_json_schema=json_joke_schema,
+        )
+
+
+def test_task_multiturn_rejects_output_json_schema():
+    with pytest.raises(ValidationError, match="structured output"):
+        Task(
+            name="Multiturn Task",
+            instruction="Test instruction",
+            turn_mode=TurnMode.multiturn,
+            output_json_schema=json_joke_schema,
+        )
+
+
+def test_task_single_turn_allows_both_schemas():
+    task = Task(
+        name="Structured Task",
+        instruction="Test instruction",
+        turn_mode=TurnMode.single_turn,
+        input_json_schema=json_joke_schema,
+        output_json_schema=json_joke_schema,
+    )
+    assert task.turn_mode == TurnMode.single_turn
+    assert task.input_json_schema == json_joke_schema
+    assert task.output_json_schema == json_joke_schema
+
+
+def test_task_turn_mode_is_frozen_after_construction(tmp_path):
+    """turn_mode is immutable at the SDK level. Assignment after construction
+    must raise — the field is the load-bearing invariant for
+    parent_task_run_id and dataset/eval iteration semantics."""
+    task = Task(
+        name="Test",
+        instruction="i",
+        path=tmp_path / "task.kiln",
+        turn_mode=TurnMode.single_turn,
+    )
+    with pytest.raises(ValidationError, match="frozen"):
+        task.turn_mode = TurnMode.multiturn  # type: ignore[misc]
+
+
+def test_task_turn_mode_immutable_after_load(tmp_path):
+    """Loading a task from disk and trying to mutate turn_mode must raise."""
+    task = Task(
+        name="Test",
+        instruction="i",
+        path=tmp_path / "task.kiln",
+        turn_mode=TurnMode.multiturn,
+    )
+    task.save_to_file()
+    loaded = Task.load_from_file(task.path)
+    assert loaded.turn_mode == TurnMode.multiturn
+    with pytest.raises(ValidationError, match="frozen"):
+        loaded.turn_mode = TurnMode.single_turn  # type: ignore[misc]
+
+
+def test_taskrun_parent_task_run_id_rejected_on_single_turn_task(tmp_path):
+    """A TaskRun pointing to a parent_task_run_id is invalid when the parent
+    Task is single-turn — Task.runs() would silently drop the parent."""
+    task = Task(
+        name="Single-turn",
+        instruction="i",
+        path=tmp_path / "task.kiln",
+        turn_mode=TurnMode.single_turn,
+    )
+    task.save_to_file()
+    parent_run = TaskRun(input="p", output=TaskOutput(output="o"), parent=task)
+    parent_run.save_to_file()
+    with pytest.raises(ValidationError, match="multi-turn"):
+        TaskRun(
+            input="c",
+            output=TaskOutput(output="o"),
+            parent=task,
+            parent_task_run_id=parent_run.id,
+        )
+
+
+def test_taskrun_parent_task_run_id_allowed_on_multiturn_task(tmp_path):
+    """The same construction must succeed for a multi-turn parent task."""
+    task = Task(
+        name="Multi-turn",
+        instruction="i",
+        path=tmp_path / "task.kiln",
+        turn_mode=TurnMode.multiturn,
+    )
+    task.save_to_file()
+    parent_run = TaskRun(input="p", output=TaskOutput(output="o"), parent=task)
+    parent_run.save_to_file()
+    child = TaskRun(
+        input="c",
+        output=TaskOutput(output="o"),
+        parent=task,
+        parent_task_run_id=parent_run.id,
+    )
+    assert child.parent_task_run_id == parent_run.id
+
+
+def _make_task_for_runs_tests(
+    tmp_path, turn_mode: TurnMode = TurnMode.multiturn
+) -> Task:
     task = Task(
         name="Test Task",
         instruction="Test instruction",
         path=tmp_path / "task.kiln",
+        turn_mode=turn_mode,
     )
     task.save_to_file()
     return task
@@ -978,3 +1112,73 @@ def test_task_runs_filters_compose(tmp_path):
             include_intermediate_runs=True, include_eval_generated=True
         )
     } == {dataset_leaf.id, eval_intermediate.id, eval_leaf.id}
+
+
+def test_task_runs_eval_child_does_not_hide_dataset_parent(tmp_path):
+    """A filtered-out eval-generated run must not count as a leaf-filter parent: an eval
+    child chained onto a curated dataset run would otherwise remove that dataset run from
+    the default view while itself being filtered, so the row vanishes entirely."""
+    task = _make_task_for_runs_tests(tmp_path)
+    output = TaskOutput(output="out")
+
+    dataset_run = TaskRun(input="dataset", output=output, parent=task)
+    dataset_run.save_to_file()
+    eval_child = TaskRun(
+        input="eval child",
+        output=output,
+        parent=task,
+        eval_source=EvalItemSource(source_type="task_run", source_id="item1"),
+        parent_task_run_id=dataset_run.id,
+    )
+    eval_child.save_to_file()
+
+    loaded_task = Task.load_from_file(task.path)
+
+    # Default view: the eval child is excluded, and the dataset run it chains onto
+    # stays visible.
+    assert {r.id for r in loaded_task.runs()} == {dataset_run.id}
+    # With eval-generated runs included the leaf filter sees the whole chain, so the
+    # dataset run is a parent and only the eval child is a leaf. Unchanged behavior.
+    assert {r.id for r in loaded_task.runs(include_eval_generated=True)} == {
+        eval_child.id
+    }
+    assert {
+        r.id
+        for r in loaded_task.runs(
+            include_intermediate_runs=True, include_eval_generated=True
+        )
+    } == {dataset_run.id, eval_child.id}
+
+
+def test_content_part_trace_bulk_load_after_readonly_scan(tmp_path):
+    """Pydantic validates list-valued message content into a lazy, single-use iterator.
+    A readonly scan caches the loaded instance; a later default (mutable) load deep-copies
+    the cached model, which crashes unless the content was materialized at validation."""
+    task = _make_task_for_runs_tests(tmp_path, turn_mode=TurnMode.single_turn)
+    run = TaskRun(
+        input="in",
+        output=TaskOutput(output="out"),
+        parent=task,
+        trace=[
+            {"role": "user", "content": [{"type": "text", "text": "hello"}]},
+            {"role": "assistant", "content": "hi"},
+        ],
+    )
+    run.save_to_file()
+
+    # Load from disk and populate the model cache, as any readonly runs scan does.
+    ModelCache.shared().clear()
+    assert {r.id for r in task.runs(readonly=True)} == {run.id}
+
+    # Cache hit on the default (mutable) path: returns a deep copy of the cached model.
+    loaded = TaskRun.from_ids_and_parent_path({run.id}, task.path)
+    assert loaded[run.id].trace is not None
+    assert loaded[run.id].trace[0]["content"] == [{"type": "text", "text": "hello"}]
+
+    # The readonly passthrough returns the cached instance without copying.
+    readonly_loaded = TaskRun.from_ids_and_parent_path(
+        {run.id}, task.path, readonly=True
+    )
+    readonly_run = readonly_loaded[run.id]
+    assert readonly_run.trace is not None
+    assert readonly_run.trace[0]["content"] == [{"type": "text", "text": "hello"}]

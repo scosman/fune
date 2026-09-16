@@ -153,7 +153,7 @@
         bind:value={email}
       />
       {#if entered_personal_email}
-        <div>
+        <div class="flex flex-col gap-2">
           <FormElement
             id="allow_personal_email_domains"
             inputType="checkbox"

@@ -104,7 +104,7 @@
     <div data-testid="runs-error">
       <Warning
         warning_color="error"
-        tight
+        inline={true}
         warning_message={runs_error.getMessage()}
       />
     </div>
@@ -184,7 +184,7 @@
       <div data-testid="skipped-result">
         <Warning
           warning_color="warning"
-          tight
+          inline={true}
           trusted
           warning_message={test_result.skipped_detail ||
             test_result.skipped_reason}
@@ -221,7 +221,7 @@
       <div data-testid="test-error">
         <Warning
           warning_color="error"
-          tight
+          inline={true}
           warning_message={test_error.getMessage()}
         />
       </div>
@@ -231,7 +231,7 @@
       <div data-testid="shape-warning">
         <Warning
           warning_color="warning"
-          tight
+          inline={true}
           trusted
           warning_message={`Score Shape Mismatch\n${test_shape_warning}`}
         />
@@ -242,7 +242,7 @@
       <div data-testid="score-range-warning">
         <Warning
           warning_color="warning"
-          tight
+          inline={true}
           trusted
           warning_message={`Score Out of Range\n${test_score_range_warning}`}
         />
@@ -283,7 +283,7 @@
       <div data-testid="test-error">
         <Warning
           warning_color="error"
-          tight
+          inline={true}
           warning_message={test_error.getMessage()}
         />
       </div>

@@ -129,11 +129,8 @@ def _check_tool_id(id: str) -> str:
 
     # Code tools must have format: kiln_tool::code::<code_tool_id>
     if id.startswith(CODE_TOOL_ID_PREFIX):
-        ct_id = code_tool_id_from_tool_id(id)
-        if not ct_id:
-            raise ValueError(
-                f"Invalid code tool ID: {id}. Expected format: 'kiln_tool::code::<code_tool_id>'."
-            )
+        # Raises ValueError on malformed IDs; the extracted ID isn't needed here.
+        code_tool_id_from_tool_id(id)
         return id
 
     # SDK / AdapterConfig.unmanaged_tools — not resolved by tool_from_id

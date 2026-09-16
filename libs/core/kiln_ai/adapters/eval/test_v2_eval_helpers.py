@@ -1,9 +1,10 @@
-"""Tests for v2_eval_helpers -- extract_value, extract_output_value, check_reference_key, stringify_for_match."""
+"""Tests for v2_eval_helpers -- extract_value, extract_output_value, check_reference_key, references_trace, stringify_for_match."""
 
 from kiln_ai.adapters.eval.eval_utils.v2_eval_helpers import (
     check_reference_key,
     extract_output_value,
     extract_value,
+    references_trace,
     stringify_for_match,
 )
 from kiln_ai.datamodel.datamodel_enums import TaskOutputRatingType
@@ -54,6 +55,53 @@ class TestExtractValue:
         value, skip, _detail = extract_value("trace", inp)
         assert value == [{"role": "user", "content": "hi"}]
         assert skip is None
+
+    def test_trace_as_string_data_not_treated_as_trace_dependency(self):
+        # 'trace' inside a string literal is data, not a variable reference —
+        # a traceless run must evaluate the expression instead of skipping.
+        inp = _make_input(final_message="the trace is fine", trace=None)
+        value, skip, _detail = extract_value("'trace' in final_message", inp)
+        assert value is True
+        assert skip is None
+
+
+# ---------------------------------------------------------------------------
+# references_trace
+# ---------------------------------------------------------------------------
+
+
+class TestReferencesTrace:
+    def test_bare_variable(self):
+        assert references_trace("trace") is True
+
+    def test_subscript(self):
+        assert references_trace("trace[-1]") is True
+
+    def test_filter(self):
+        assert references_trace("trace | length") is True
+
+    def test_conditional(self):
+        assert references_trace("trace[0].content if trace else final_message") is True
+
+    def test_quoted_string_is_not_a_reference(self):
+        assert references_trace("'trace' in final_message") is False
+
+    def test_dict_key_is_not_a_reference(self):
+        assert references_trace("{'trace': 1}") is False
+
+    def test_attribute_of_other_variable_is_not_a_reference(self):
+        assert references_trace("final_message.trace") is False
+
+    def test_subscript_key_of_other_variable_is_not_a_reference(self):
+        assert references_trace("reference_data['trace']") is False
+
+    def test_similar_identifier_is_not_a_reference(self):
+        assert references_trace("retrace") is False
+
+    def test_invalid_expression_is_not_a_reference(self):
+        # Syntax errors are the extraction path's to report; no trace
+        # dependency is claimed for them.
+        assert references_trace("trace [") is False
 
 
 # ---------------------------------------------------------------------------

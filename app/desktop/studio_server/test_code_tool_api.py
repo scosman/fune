@@ -187,6 +187,23 @@ class TestCreateCodeTool:
         assert response.status_code == 400
         assert "run" in response.json()["message"].lower()
 
+    def test_create_reserved_word_param_rejected(
+        self, client, test_project, mock_project_from_id, create_request
+    ):
+        create_request["parameters_schema"] = {
+            "type": "object",
+            "properties": {"from": {"type": "string"}},
+        }
+        with patch(TRUST_PATCH, return_value=True):
+            response = client.post(
+                f"/api/projects/{test_project.id}/code_tools",
+                json=create_request,
+            )
+        assert response.status_code == 400
+        message = response.json()["message"]
+        assert "'from'" in message
+        assert "reserved Python keyword" in message
+
 
 class TestListCodeTools:
     def test_list_empty(self, client, test_project, mock_project_from_id):

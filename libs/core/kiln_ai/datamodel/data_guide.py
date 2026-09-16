@@ -25,8 +25,7 @@ class DataGuide(KilnParentedModel):
       `# Presentation Defaults`.
     - **Kiln Pro / Copilot flow** (analyze pipeline): only `# Semantics`,
       `# Style`, `# Presentation Defaults` — the analyze prompt derives rules
-      from input documents rather than quoting them, matching Mike's
-      GENERATE_CORPUS_GUIDELINES vocabulary.
+      from input documents rather than quoting them.
 
     The metaprompter treats the whole body as one editable artifact and returns
     a refined version on each refine pass; refine auto-detects which shape it

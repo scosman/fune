@@ -7,6 +7,7 @@ from kiln_ai.adapters.eval.g_eval import GEval
 from kiln_ai.adapters.eval.registry import (
     legacy_eval_adapter_from_type,
     v2_eval_adapter_from_config,
+    v2_eval_type_available,
 )
 from kiln_ai.datamodel.eval import (
     CodeEvalProperties,
@@ -107,3 +108,21 @@ class TestV2EvalAdapterFromConfig:
         cfg = _mock_eval_config(EvalConfigType.g_eval)
         with pytest.raises(ValueError, match="only accepts V2 configs"):
             v2_eval_adapter_from_config(cfg)
+
+
+class TestV2EvalTypeAvailable:
+    """The pure availability probe: True exactly when dispatch would succeed."""
+
+    @pytest.mark.parametrize(
+        "v2_type", TestV2EvalAdapterFromConfig._IMPLEMENTED_V2_TYPES
+    )
+    def test_registered_types_available(self, v2_type: V2EvalType):
+        assert v2_eval_type_available(_mock_v2_eval_config(v2_type)) is True
+
+    def test_legacy_config_not_available(self):
+        assert v2_eval_type_available(_mock_eval_config(EvalConfigType.g_eval)) is False
+
+    def test_untyped_properties_not_available(self):
+        cfg = _mock_eval_config(EvalConfigType.v2)
+        cfg.properties = {"type": "llm_judge"}
+        assert v2_eval_type_available(cfg) is False

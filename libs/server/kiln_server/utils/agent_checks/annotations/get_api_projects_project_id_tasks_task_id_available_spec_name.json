@@ -1,0 +1,8 @@
+{
+  "method": "get",
+  "path": "/api/projects/{project_id}/tasks/{task_id}/available_spec_name",
+  "agent_policy": {
+    "permission": "allow",
+    "requires_approval": false
+  }
+}

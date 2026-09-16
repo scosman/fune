@@ -10,6 +10,10 @@ import {
 // percentages: whichever splits the eval can't receive data for are dropped and the rest are
 // rescaled to 100% (see allocate_splits). Most goes to train because that's the set which has
 // to be large; golden gets the least because it's the hand-curated one.
+// The train:val pair is mirrored by TRAIN_DEAL_WEIGHT / VAL_DEAL_WEIGHT in
+// app/desktop/studio_server/utils/copilot_utils.py, which deals the spec
+// wizard's saved runs. Change one and change the other, or generated data and
+// wizard-saved data land in the splits at different ratios.
 export const TRAIN_SPLIT_WEIGHT = 40
 export const VAL_SPLIT_WEIGHT = 25
 export const TEST_SPLIT_WEIGHT = 25

@@ -139,7 +139,7 @@
       >
         <Warning
           warning_message={`Some evals are incomplete and should be excluded from analysis. Click 'Run All Evals' to generate missing results.`}
-          tight={true}
+          inline={true}
         />
       </button>
     </div>

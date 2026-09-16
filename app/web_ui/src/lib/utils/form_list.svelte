@@ -13,6 +13,19 @@
   // Unique ID for the list, for scrolling to top after removal
   let id = "form_list_" + Math.random().toString(36).substring(2, 15)
 
+  // The add button, used as a stable in-tree anchor to announce row changes.
+  let add_button_el: HTMLButtonElement | undefined
+
+  // Adding/removing a row is a plain button click, which fires no native
+  // input/change event. Emit a bubbling change like a native control would
+  // (mirrors fancy_select) so ancestor on:change handlers — e.g. unsaved-changes
+  // and tested-state tracking — react to structural row edits. The initial
+  // start_with_one seed runs before mount, so add_button_el is still undefined
+  // then and no spurious event fires.
+  function announce_row_change() {
+    add_button_el?.dispatchEvent(new Event("change", { bubbles: true }))
+  }
+
   function remove_item(index: number) {
     let item = content[index]
     let isItemUnedited = false
@@ -43,6 +56,7 @@
       content.splice(index, 1)
       // trigger reactivity
       content = content
+      announce_row_change()
       // Move the page to the top anchor
       const list = document.getElementById(id)
       if (list) {
@@ -62,6 +76,7 @@
     }
     // Trigger reactivity
     content = content
+    announce_row_change()
     if (focus) {
       // Scroll into view. Async to allow rendering first
       setTimeout(() => {
@@ -108,6 +123,7 @@
 
 <div class="flex place-content-center">
   <button
+    bind:this={add_button_el}
     class="btn btn-sm mt-4 {frozen || hide_add_button ? 'hidden' : ''}"
     on:click={() => add_item(true)}
     id={id + "_add_button"}

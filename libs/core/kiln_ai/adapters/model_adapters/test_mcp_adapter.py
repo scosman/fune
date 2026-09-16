@@ -306,18 +306,20 @@ async def test_mcp_adapter_runtime_failure_wrapped_in_kiln_run_error(
 @pytest.mark.asyncio
 @patch("kiln_ai.tools.mcp_server_tool.get_agent_run_id", return_value="test_run_id")
 @patch("kiln_ai.tools.mcp_server_tool.MCPSessionManager")
-async def test_mcp_adapter_output_schema_mismatch_wrapped_in_kiln_run_error(
+async def test_mcp_adapter_unparseable_output_wrapped_in_kiln_run_error(
     mock_session_manager,
     _mock_run_id,
     project_with_local_mcp_server,
     local_mcp_tool_id,
 ):
-    """Post-run output schema validation failures should surface as KilnRunError."""
-    from kiln_ai.adapters.errors import KilnRunError
+    """A tool response that isn't JSON on a structured-output task must surface
+    as KilnRunError carrying StructuredOutputParseError, so it is retried like
+    the other adapters' parse failures instead of failing the run outright."""
+    from kiln_ai.adapters.errors import KilnRunError, StructuredOutputParseError
 
     project, _ = project_with_local_mcp_server
     task = Task(
-        name="Schema Mismatch MCP Task",
+        name="Unparseable Output MCP Task",
         parent=project,
         instruction="Return JSON",
         output_json_schema=json.dumps(
@@ -342,7 +344,54 @@ async def test_mcp_adapter_output_schema_mismatch_wrapped_in_kiln_run_error(
         await adapter.invoke_returning_run_output("input")
 
     assert ei.value.partial_trace is None
-    assert ei.value.error_type is not None
+    assert isinstance(ei.value.original, StructuredOutputParseError)
+    assert ei.value.error_type == "StructuredOutputParseError"
+
+
+@pytest.mark.asyncio
+@patch("kiln_ai.tools.mcp_server_tool.get_agent_run_id", return_value="test_run_id")
+@patch("kiln_ai.tools.mcp_server_tool.MCPSessionManager")
+async def test_mcp_adapter_wrong_shape_output_wrapped_in_kiln_run_error(
+    mock_session_manager,
+    _mock_run_id,
+    project_with_local_mcp_server,
+    local_mcp_tool_id,
+):
+    """Valid JSON that isn't the object the task needs parses fine, so it skips
+    the parse failure above. It's the same one-off shape slip and must carry the
+    same retryable type."""
+    from kiln_ai.adapters.errors import KilnRunError, StructuredOutputParseError
+
+    project, _ = project_with_local_mcp_server
+    task = Task(
+        name="Wrong Shape Output MCP Task",
+        parent=project,
+        instruction="Return JSON",
+        output_json_schema=json.dumps(
+            {
+                "type": "object",
+                "properties": {"status": {"type": "string"}},
+                "required": ["status"],
+            }
+        ),
+    )
+
+    run_config = McpRunConfigProperties(
+        tool_reference=MCPToolReference(tool_id=local_mcp_tool_id)
+    )
+
+    # Tool wraps the object in a list, so parsing succeeds but the shape is wrong.
+    _mock_mcp_call(mock_session_manager, '[{"status": "ok"}]')
+
+    adapter = MCPAdapter(task=task, run_config=run_config)
+
+    with pytest.raises(KilnRunError) as ei:
+        await adapter.invoke_returning_run_output("input")
+
+    assert isinstance(ei.value.original, StructuredOutputParseError)
+    assert ei.value.error_type == "StructuredOutputParseError"
+    # Message text is unchanged from when this raised RuntimeError.
+    assert str(ei.value) == "structured response is not a dict: [{'status': 'ok'}]"
 
 
 @pytest.mark.slow

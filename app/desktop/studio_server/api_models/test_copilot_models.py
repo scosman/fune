@@ -14,11 +14,14 @@ from app.desktop.studio_server.api_models.copilot_models import (
     ReviewedExample,
     SampleApi,
     SpecApi,
+    SpecQuestionerApiInput,
     SubsampleBatchOutputItemApi,
     SyntheticDataGenerationSessionConfigApi,
     SyntheticDataGenerationStepConfigApi,
     TaskInfoApi,
     TaskMetadataApi,
+    TaskSkillInfoApi,
+    TaskToolInfoApi,
 )
 
 
@@ -39,6 +42,47 @@ class TestTaskInfoApi:
                 task_prompt="Test prompt",
                 task_input_schema='{"type": "string"}',
             )  # type: ignore
+
+    def test_capabilities_default_to_uncollected(self):
+        """Unset means the capabilities were not collected — distinct from []
+        meaning the task has none. Conflating them would tell the copilot
+        prompts a task has no tools when nobody ever looked."""
+        info = TaskInfoApi(
+            task_prompt="Test prompt",
+            task_input_schema='{"type": "string"}',
+            task_output_schema='{"type": "object"}',
+        )
+        assert info.task_tools is None
+        assert info.task_skills is None
+
+    def test_empty_capabilities_survive_as_empty(self):
+        info = TaskInfoApi(
+            task_prompt="Test prompt",
+            task_input_schema='{"type": "string"}',
+            task_output_schema='{"type": "object"}',
+            task_tools=[],
+            task_skills=[],
+        )
+        assert info.task_tools == []
+        assert info.task_skills == []
+
+    def test_capabilities_carry_name_and_description_only(self):
+        """Tool parameters and skill bodies must never ride along."""
+        info = TaskInfoApi.model_validate(
+            {
+                "task_prompt": "Test prompt",
+                "task_input_schema": '{"type": "string"}',
+                "task_output_schema": '{"type": "object"}',
+                "task_tools": [{"name": "add", "description": "Adds two numbers."}],
+                "task_skills": [{"name": "refunds", "description": "Refund policy."}],
+            }
+        )
+        assert info.task_tools == [
+            TaskToolInfoApi(name="add", description="Adds two numbers.")
+        ]
+        assert info.task_skills == [
+            TaskSkillInfoApi(name="refunds", description="Refund policy.")
+        ]
 
 
 class TestTaskMetadataApi:
@@ -172,6 +216,49 @@ class TestExampleWithFeedbackApi:
             user_feedback="This is wrong because...",
         )
         assert example.user_feedback == "This is wrong because..."
+
+
+class TestTaskScopedCopilotInput:
+    """The optional task reference every enrichable copilot input carries."""
+
+    @staticmethod
+    def _questioner_input(**ids):
+        return SpecQuestionerApiInput(
+            target_task_info=TaskInfoApi(
+                task_prompt="Test prompt",
+                task_input_schema="{}",
+                task_output_schema="{}",
+            ),
+            target_specification="Test spec",
+            **ids,
+        )
+
+    def test_both_ids_omitted_is_allowed(self):
+        input_model = self._questioner_input()
+        assert input_model.project_id is None
+        assert input_model.task_id is None
+
+    def test_both_ids_present_is_allowed(self):
+        input_model = self._questioner_input(project_id="p1", task_id="t1")
+        assert input_model.project_id == "p1"
+        assert input_model.task_id == "t1"
+
+    @pytest.mark.parametrize(
+        "ids",
+        [{"project_id": "p1"}, {"task_id": "t1"}],
+        ids=["project_id_only", "task_id_only"],
+    )
+    def test_half_a_task_reference_is_rejected(self, ids):
+        with pytest.raises(ValidationError, match="must be provided together"):
+            self._questioner_input(**ids)
+
+    def test_empty_ids_count_as_provided(self):
+        """An empty string is a supplied (bad) id, not an omitted one — it
+        belongs in the task lookup, which rejects it, rather than silently
+        turning into an un-enriched request."""
+        input_model = self._questioner_input(project_id="", task_id="")
+        assert input_model.project_id == ""
+        assert input_model.task_id == ""
 
 
 class TestClarifySpecApiInput:

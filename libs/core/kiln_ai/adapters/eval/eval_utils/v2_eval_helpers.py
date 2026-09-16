@@ -1,8 +1,8 @@
 import json
-import re
 from typing import Any
 
-from jinja2 import Undefined
+from jinja2 import TemplateSyntaxError, Undefined, meta, nodes
+from jinja2.parser import Parser
 from kiln_ai.datamodel.eval import (
     EvalOutputScore,
     EvalScores,
@@ -10,7 +10,7 @@ from kiln_ai.datamodel.eval import (
     SkippedReason,
     V2EvalResult,
 )
-from kiln_ai.utils.jinja_engine import JinjaExtractionError, extract
+from kiln_ai.utils.jinja_engine import JinjaExtractionError, _expression_env, extract
 
 
 def build_binary_scores(
@@ -26,14 +26,24 @@ def build_binary_scores(
     return {score.json_key(): value for score in output_scores}
 
 
-# Matches the `trace` identifier as a whole word (e.g. `trace`, `trace[-1]`,
-# `trace | length`) without matching substrings like `retrace` or `tracer`.
-_TRACE_REFERENCE_RE = re.compile(r"\btrace\b")
-
-
 def references_trace(expression: str) -> bool:
-    """True if a Jinja expression references the `trace` variable."""
-    return bool(_TRACE_REFERENCE_RE.search(expression))
+    """True if a Jinja expression references the `trace` variable.
+
+    Uses Jinja's own parser so only genuine variable references count --
+    'trace' appearing as data (a quoted string, a dict key, an attribute of
+    another variable) does not.
+    """
+    try:
+        # Same parse compile_expression performs, wrapped into a template node
+        # so meta can resolve the expression's undeclared (i.e. input) names.
+        parser = Parser(_expression_env, expression, state="variable")
+        template = nodes.Template([nodes.Output([parser.parse_expression()])], lineno=1)
+    except TemplateSyntaxError:
+        # Invalid expressions can't reference anything; the extraction path
+        # owns reporting the syntax error.
+        return False
+    template.set_environment(_expression_env)
+    return "trace" in meta.find_undeclared_variables(template)
 
 
 def extract_value(

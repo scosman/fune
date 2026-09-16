@@ -14,6 +14,7 @@ from kiln_server.statistics_lib import (
     mcnemar_exact_p,
     paired_bootstrap_diff_ci,
     paired_proportion_diff_ci,
+    percentile,
     wilcoxon_signed_rank_p,
     wilson_ci,
     wilson_difference_ci,
@@ -55,6 +56,46 @@ class TestWilson:
         assert delta == pytest.approx(0.2, abs=1e-9)
         assert low < high
         assert wilson_difference_ci(0, 0, 5, 10) is None
+
+
+class TestPercentile:
+    """Gold values are numpy.percentile's default (linear interpolation)."""
+
+    def test_empty_is_none(self) -> None:
+        # None, not 0.0 — a 0 would read downstream as a real datum.
+        assert percentile([], 50) is None
+        assert percentile([], 90) is None
+
+    def test_single_value(self) -> None:
+        assert percentile([7.5], 0) == 7.5
+        assert percentile([7.5], 50) == 7.5
+        assert percentile([7.5], 100) == 7.5
+
+    def test_odd_length_median_is_middle(self) -> None:
+        assert percentile([3.0, 1.0, 2.0], 50) == pytest.approx(2.0)
+
+    def test_even_length_median_interpolates(self) -> None:
+        # Average of the two middle values, not the lower one.
+        assert percentile([1.0, 2.0, 3.0, 4.0], 50) == pytest.approx(2.5)
+
+    def test_unsorted_input(self) -> None:
+        assert percentile([5.0, 1.0, 4.0, 2.0, 3.0], 50) == pytest.approx(3.0)
+
+    @pytest.mark.parametrize(
+        "p,expected",
+        [(0, 1.0), (25, 3.25), (50, 5.5), (75, 7.75), (90, 9.1), (100, 10.0)],
+    )
+    def test_matches_numpy_defaults(self, p: float, expected: float) -> None:
+        values = [float(v) for v in range(1, 11)]
+        assert percentile(values, p) == pytest.approx(expected)
+
+    def test_all_equal(self) -> None:
+        assert percentile([2.0, 2.0, 2.0], 90) == pytest.approx(2.0)
+
+    @pytest.mark.parametrize("bad", [-1, 101, 150.0])
+    def test_out_of_range_raises(self, bad: float) -> None:
+        with pytest.raises(ValueError):
+            percentile([1.0, 2.0], bad)
 
 
 class TestMcNemar:

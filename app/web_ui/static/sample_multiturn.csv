@@ -1,0 +1,3 @@
+trace,tags
+"[{""role"":""user"",""content"":""Hi""},{""role"":""assistant"",""content"":""Hello!""}]",greeting
+"[{""role"":""user"",""content"":""What is 2+2?""},{""role"":""assistant"",""content"":""4"",""reasoning_content"":""The user is asking a basic arithmetic question. 2 plus 2 equals 4.""},{""role"":""user"",""content"":""And 3+3?""},{""role"":""assistant"",""content"":""6""}]",math

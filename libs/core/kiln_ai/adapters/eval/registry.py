@@ -34,6 +34,17 @@ _V2_ADAPTER_MAP: dict[V2EvalType, type[BaseV2EvalBridge]] = {
 }
 
 
+def v2_eval_type_available(eval_config: EvalConfig) -> bool:
+    """Whether this config's V2 type has a registered adapter — the pure
+    availability probe behind the type_not_available skip, safe to call
+    during job collection (no adapter is instantiated)."""
+    if eval_config.config_type != EvalConfigType.v2:
+        return False
+    if not isinstance(eval_config.properties, V2_PROPERTY_TYPES):
+        return False
+    return eval_config.properties.type in _V2_ADAPTER_MAP  # type: ignore[union-attr]
+
+
 def legacy_eval_adapter_from_type(eval_config: EvalConfig) -> type[BaseEval]:
     """Legacy dispatch -- returns a BaseEval subclass for g_eval/llm_as_judge.
 

@@ -15,6 +15,9 @@
   data-sub-subtitle-link={sub_subtitle_link || undefined}
   data-limit-max-width={limit_max_width}
   data-action-button-count={action_buttons.length}
+  data-action-button-labels={action_buttons
+    .map((button) => button.label)
+    .join(",")}
 >
   <slot />
 </div>

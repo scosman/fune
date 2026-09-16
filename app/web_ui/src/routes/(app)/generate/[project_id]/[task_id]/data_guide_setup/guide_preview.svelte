@@ -377,7 +377,7 @@
         warning_message="Synthetic input generation is working as expected."
         warning_color="success"
         warning_icon="check"
-        tight
+        inline={true}
       />
     </div>
   {:else if !all_reviewed}
@@ -386,7 +386,7 @@
         warning_message="Please review all examples above."
         warning_color="warning"
         warning_icon="exclaim"
-        tight
+        inline={true}
       />
     </div>
   {:else if has_any_failed && !has_sufficient_feedback}
@@ -395,7 +395,7 @@
         warning_message="Please provide feedback about what needs work."
         warning_color="warning"
         warning_icon="exclaim"
-        tight
+        inline={true}
       />
     </div>
   {/if}

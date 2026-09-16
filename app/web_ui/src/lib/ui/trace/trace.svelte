@@ -7,9 +7,21 @@
 
   export let trace: Trace
   export let project_id: string | undefined = undefined
+  // Indices into `trace` whose messages start expanded. Default empty, which
+  // is every message collapsed — a long trace opens as a scannable list of
+  // rows and the reader expands what they want. A caller passes indices when
+  // one specific message is the thing being read and should cost no click.
+  export let auto_expand_indices: number[] = []
 
-  // Track collapsed state for each message (true = expanded, false = collapsed)
-  let messageExpanded: boolean[] = trace.map(() => false)
+  // Track collapsed state for each message (true = expanded, false = collapsed).
+  // Built ONCE, from the trace this component mounted with: a reader's clicks
+  // own the state from then on, and a parent that reassigns a structurally
+  // identical trace (the run page does on save) must not close what they
+  // opened. A caller that needs the expansion re-applied for a different
+  // trace remounts this component — see the review surface's {#key}.
+  let messageExpanded: boolean[] = trace.map((_, index) =>
+    auto_expand_indices.includes(index),
+  )
 
   function getRoleDisplayName(role: string): string {
     return (

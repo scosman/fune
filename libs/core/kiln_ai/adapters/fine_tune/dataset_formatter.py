@@ -375,7 +375,12 @@ class DatasetFormatter:
             / f"{self.dataset.name} -- split-{split_name} -- format-{format_type.value} -- {'cot' if include_cot else 'no-cot'}.jsonl"
         )
 
-        runs = self.task.runs()
+        # Include intermediate runs: a split snapshots run IDs at creation
+        # time (leaves-only), but the user can later extend a multiturn
+        # conversation - turning a run that was a leaf when the split was
+        # built into an intermediate. We still need to resolve it here so
+        # the export doesn't fail with "task run not found".
+        runs = self.task.runs(include_intermediate_runs=True)
         runs_by_id = {run.id: run for run in runs}
 
         # Generate formatted output with UTF-8 encoding

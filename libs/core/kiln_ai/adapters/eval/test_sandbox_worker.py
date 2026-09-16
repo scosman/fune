@@ -147,6 +147,19 @@ class TestCapture:
         assert "ok" in result
         assert "err msg" in result["stderr"]
 
+    def test_large_captured_output_succeeds(self):
+        # A result payload bigger than the OS pipe buffer (~64KB) keeps the
+        # child alive until the parent drains the queue; the run must succeed
+        # instead of being misreported as a timeout.
+        code = (
+            "def score(output, trace, reference_data, task_input):\n"
+            "    print('x' * 70_000)\n"
+            "    return {'x': 1.0}\n"
+        )
+        result = run_scorer(code, _inputs(), timeout=10)
+        assert result["ok"] == {"x": 1.0}
+        assert len(result["stdout"]) >= 70_000
+
 
 # ---------------------------------------------------------------------------
 # Error cases
@@ -200,6 +213,25 @@ class TestErrors:
         )
         with pytest.raises(RuntimeError, match="exit code"):
             run_scorer(code, _inputs(), timeout=10)
+
+    def test_sys_exit_reported_as_user_error(self):
+        # sys.exit() must surface as a user-code error, not a generic
+        # no-result crash from the child dying silently.
+        code = (
+            "import sys\n"
+            "def score(output, trace, reference_data, task_input):\n"
+            "    sys.exit(2)\n"
+        )
+        result = run_scorer(code, _inputs(), timeout=10)
+        assert "error" in result
+        assert "sys.exit(2)" in result["error"]
+        assert "traceback" in result
+
+    def test_sys_exit_at_module_level(self):
+        code = "import sys\nsys.exit()\n"
+        result = run_scorer(code, _inputs(), timeout=10)
+        assert "error" in result
+        assert "sys.exit" in result["error"]
 
 
 # ---------------------------------------------------------------------------

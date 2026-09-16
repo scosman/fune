@@ -1,11 +1,7 @@
 <script lang="ts">
-  import { page } from "$app/stores"
   import { ui_state } from "$lib/stores"
   import CopilotAuthPage from "$lib/ui/kiln_copilot/copilot_auth_page.svelte"
   import { agentInfo } from "$lib/agent"
-  import { spec_builder_url } from "../[project_id]/[task_id]/spec_utils"
-  import type { SpecType } from "$lib/types"
-  import type { V2EvalType } from "$lib/utils/eval_types/registry"
 
   agentInfo.set({
     name: "Evals Kiln Pro Auth",
@@ -15,18 +11,12 @@
   $: project_id = $ui_state.current_project_id
   $: task_id = $ui_state.current_task_id
 
-  // The workflow screen sends the already-chosen template and judge along, so
-  // a successful connect drops the user into the spec builder in pro mode.
-  // Without them (stale bookmark), restart at the type picker — or the home
-  // page if ui_state has no current project/task to build a URL from.
-  $: spec_type = $page.url.searchParams.get("type") as SpecType | null
-  $: judge = $page.url.searchParams.get("judge") as V2EvalType | null
+  // A successful connect returns to eval creation at the type picker — or the
+  // home page if ui_state has no current project/task to build a URL from.
   $: success_redirect_url =
-    spec_type && judge && project_id && task_id
-      ? spec_builder_url(project_id, task_id, spec_type, "pro", judge)
-      : project_id && task_id
-        ? `/specs/${project_id}/${task_id}/select_template`
-        : "/"
+    project_id && task_id
+      ? `/specs/${project_id}/${task_id}/select_template`
+      : "/"
 </script>
 
 <CopilotAuthPage

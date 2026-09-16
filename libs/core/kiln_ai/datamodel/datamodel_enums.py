@@ -70,6 +70,13 @@ class FineTuneStatusType(str, Enum):
     failed = "failed"
 
 
+class TurnMode(str, Enum):
+    """Whether a Task runs as a single turn or as a multiturn conversation."""
+
+    single_turn = "single_turn"
+    multiturn = "multiturn"
+
+
 class ChatStrategy(str, Enum):
     """Strategy for how a chat is structured."""
 
